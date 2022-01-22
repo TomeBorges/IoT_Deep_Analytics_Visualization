@@ -1,9 +1,9 @@
 ---
-title: "Task 4: Discover Associations Between Products"
+title: "Task 1: Domain Research and Exploratory Data Analysis"
 output: html_notebook
 ---
 
-This notebook contains the answers to Task 4: Discover Associations Between Products.
+This notebook contains the answers to Task 1: Domain Research and Exploratory Data Analysis.
 
 
 ```{r - Initial imports}
