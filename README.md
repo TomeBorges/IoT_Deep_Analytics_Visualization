@@ -1,4 +1,4 @@
-# IOT_Deep_Analytics_Visualization
+# IoT - Deep Analytics & Visualization
  
  Ubiqum - Course 4 Deep Analytics and Visualization
  
