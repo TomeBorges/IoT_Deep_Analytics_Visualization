@@ -5,6 +5,9 @@ output: html_notebook
 
 This notebook contains the answers to Task 1: Domain Research and Exploratory Data Analysis.
 
+Notes for next tasks:
+-Remember to see prophet tool by Facebook
+-Be careful with trends, seasonality, and cycles in the data. I must be careful about this when doing time series forecasting. Verifiy if the three components react in an additive (variations stay fixed throughout time) or multiplicative (variations grow larger) way, I should handle data differently.
 
 ```{r - Initial imports}
 library(RMySQL)
@@ -209,6 +212,7 @@ As can be seen above, we have counted 1440 rows, each corresponds to a minute of
 ```{r - Gather summary statistics}
 summary(df)
 ```
+
 Using the summary function, a few oconclusions can be taken. For the sub_metering groups, the minimum value does not contain any useful information, it is always null, which makes sense because no single house room is constantly consuming energy in a common household.
 Now, going into further detail:
 - Sub_metering_1, which correspondes to the kitchen, has got the lowest consumption of all groups. This group contains the lowest 3rd quantile and mean value. On the other hand, it contains the highest maximum value. A possibility for this fact could be due to when a person uses the kitchen to cook, typically more than one appliance is used and more intensively, the same is not necessarily true for the remaining sub_metering groups.
@@ -216,11 +220,11 @@ Now, going into further detail:
 - Lastly, the sub_metering_3 group, referring to the electric water-heater and air-conditioner has got a much higher mean, median and 3rd quartile. Inline with the second group, this fact suggests that the 3rd group requires a much more prolonged usage. However, the maximum value is the lowest of all groups suggesting that this last group seldom has any peak usage. This makes sense because this appliances are supposed to be used continuously without requiring large energetic efforts.
 
 In order to improve the quality of this dataset and consequently the analysis, one could:
-1. Add attributes 
+1. The important thing to discover trends, cycles or seasonality in the power usage values for this home. With this in mind, it is important to resample the dataset according to different time frequency. In this case specifically we have received a dataset detailed up to the minute, therefore it is simple to resample the data (group data points) to larger time spans. In the next task I will investigate whether grouping data points by hour (and maybe day day times such as morning, midday, afternoon, evening, night time), day, week, month, quarter (4 seasons basically) and even year. Looking towards data according to these different time samplings will surely be helpful to look at the data from different perspectives and will help to find trends, cycles or seasonality.
 2. Instead of separating the sub-metering groups per room, one could separate according per usage intensity. This way, such an analysis would reveal further information about each type of appliance instead of room usage. The first group could contain continuously used appliances, such as the AC, water heater or fridge. The second could contain appliances not so frequently used, but when used these take a long time running, such as the dishwasher, washing machine or tumble-drier. And finally sporadically used appliances such as the microwave or the lights. This alternative grouping seems to be as valid as the original one, but the conclusions taken would be slightly different.
 
 
-sporadic and low usage such as 
+
 
 
 
