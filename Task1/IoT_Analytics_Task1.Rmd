@@ -212,8 +212,22 @@ As can be seen above, we have counted 1440 rows, each corresponds to a minute of
 ```{r - Gather summary statistics}
 summary(df)
 ```
+```{r - Mode for each column}
+Mode <- function(x) {
+  ux <- unique(x)
+  ux[which.max(tabulate(match(x, ux)))]
+}
 
-Using the summary function, a few oconclusions can be taken. For the sub_metering groups, the minimum value does not contain any useful information, it is always null, which makes sense because no single house room is constantly consuming energy in a common household.
+apply(df, 2, Mode)
+```
+```{r}
+sd(df$Sub_metering_1)
+sd(df$Sub_metering_2)
+sd(df$Sub_metering_3)
+
+```
+
+Using the summary function, a few conclusions can be taken. For the sub-metering groups, the minimum value does not contain any useful information, it is always null, which makes sense because no single house room is constantly consuming energy in a common household.
 Now, going into further detail:
 - Sub_metering_1, which correspondes to the kitchen, has got the lowest consumption of all groups. This group contains the lowest 3rd quantile and mean value. On the other hand, it contains the highest maximum value. A possibility for this fact could be due to when a person uses the kitchen to cook, typically more than one appliance is used and more intensively, the same is not necessarily true for the remaining sub_metering groups.
 - Sub_metering_2, which corresponds to the laundry room, has got a higher 3rd quartile and mean than the first group. This suggests that the set of appliances measured in this group is in usage for longer periods of times. The maximum value though, is slightly lower than the kitchen froup suggesting less intensive usage of this room.
@@ -222,6 +236,7 @@ Now, going into further detail:
 In order to improve the quality of this dataset and consequently the analysis, one could:
 1. The important thing to discover trends, cycles or seasonality in the power usage values for this home. With this in mind, it is important to resample the dataset according to different time frequency. In this case specifically we have received a dataset detailed up to the minute, therefore it is simple to resample the data (group data points) to larger time spans. In the next task I will investigate whether grouping data points by hour (and maybe day day times such as morning, midday, afternoon, evening, night time), day, week, month, quarter (4 seasons basically) and even year. Looking towards data according to these different time samplings will surely be helpful to look at the data from different perspectives and will help to find trends, cycles or seasonality.
 2. Instead of separating the sub-metering groups per room, one could separate according per usage intensity. This way, such an analysis would reveal further information about each type of appliance instead of room usage. The first group could contain continuously used appliances, such as the AC, water heater or fridge. The second could contain appliances not so frequently used, but when used these take a long time running, such as the dishwasher, washing machine or tumble-drier. And finally sporadically used appliances such as the microwave or the lights. This alternative grouping seems to be as valid as the original one, but the conclusions taken would be slightly different.
+  2.1.Alternatively, if each sub-meter had a different "channel", one for each appliance this problem would also be solved as one could look into each appliance individually. This way, the clients could find the least efficient appliances and find a replacement for these or try using it more responsibly.
 
 
 
