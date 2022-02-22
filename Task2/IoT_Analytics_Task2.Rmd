@@ -242,12 +242,82 @@ In order to improve the quality of this dataset and consequently the analysis, o
 
 *Visualize the data*
 
+**Study of granularity:**
 ```{r - Plot all of sub-meter 1}
-plot(yourData$Sub_metering_1)
+plot(df$Sub_metering_1)
 ```
 
 Clearly this graph is not useful. As mentioned, above we have plotted "over 1,500,000 minutes from the beginning of 2007 though the end of 2009", this representation contains too granularity.
 
+```{r - Plot all of sub-meter 1 with lower granularity (weekly or anything else)}
+
+# Aggregate over week number and climate division
+plot(aggregate(Sub_metering_1~Week, FUN=mean, data=df, na.rm=TRUE))
+```
+
+**Study of subsetting and Meaningful Time Periods:**
+```{r - Subset the second week of 2008 - All Observations}
+houseWeek <- filter(df, year == 2008 & week == 2)
+## Plot subset houseWeek
+plot(houseWeek$Sub_metering_1)
+```
+
+As suggested, even though this graph is more revealing, too much information is still present here.
+
+**Study of visualizing a Single Day with Plotly:**
+
+```{r - Subset the 9th day of January 2008 - All observations}
+## 
+houseDay <- filter(df, year == 2008 & month == 1 & day == 9)
+## Plot sub-meter 1
+plot_ly(houseDay, x = ~houseDay$DateTime, y = ~houseDay$Sub_metering_1, type = 'scatter', mode = 'lines')
+```
+
+Line plots seem to be better suited for this task, because, similarly to time, this is a continuous representation of the time series data. The previous dotted plots were discrete and less obvious for this task.
+
+```{r - Plot sub-meter 1, 2 and 3 with title, legend and labels - All observations }
+plot_ly(houseDay, x = ~houseDay$DateTime, y = ~houseDay$Sub_metering_1, name = 'Kitchen', type = 'scatter', mode = 'lines') %>%
+ add_trace(y = ~houseDay$Sub_metering_2, name = 'Laundry Room', mode = 'lines') %>%
+ add_trace(y = ~houseDay$Sub_metering_3, name = 'Water Heater & AC', mode = 'lines') %>%
+ layout(title = "Power Consumption January 9th, 2008",
+ xaxis = list(title = "Time"),
+ yaxis = list (title = "Power (watt-hours)"))
+```
+
+This plot is much more revealing, but still quite grainy as can clearly be seen in the water heater & AC peak usages. Now, I will reduce granularity from one observation per minute to one observation every 10 minytes:
+
+```{r - Subset the 9th day of January 2008 - 10 Minute frequency}
+# Refilter the data with less granularity (only see one measurement every 10 minutes)
+houseDay10 <- filter(df, year == 2008 & month == 1 & day == 9 & (minute == 0 | minute == 10 | minute == 20 | minute == 30 | minute == 40 | minute == 50))
+```
+
+```{r - Plot sub-meter 1, 2 and 3 with title, legend and labels - 10 Minute frequency}
+plot_ly(houseDay10, x = ~houseDay10$DateTime, y = ~houseDay10$Sub_metering_1, name = 'Kitchen', type = 'scatter', mode = 'lines') %>%
+ add_trace(y = ~houseDay10$Sub_metering_2, name = 'Laundry Room', mode = 'lines') %>%
+ add_trace(y = ~houseDay10$Sub_metering_3, name = 'Water Heater & AC', mode = 'lines') %>%
+ layout(title = "Power Consumption January 9th, 2008",
+ xaxis = list(title = "Time"),
+ yaxis = list (title = "Power (watt-hours)"))
+```
+This graph is identical to the one presented above but much clearer. In this case, "less is more" clearly. 
+From this visualization, conclusions such as the following can be taken:
+1. The water Heater & AC are mostly used in the morning and finally late in the afternoon. morning or late afternoon could contain the shower routine and consequently water heating. Additionaly plates must be washed at these times, so water heating is needed with or without showers.
+2. The AC could be due to house usage and climatizaion during the day (after all this is a January day, so we are looking into a cold French Wednesday, AC heating might be needed to regain the heat lost during the night in the morning).
+3. The Laundry Room contains the refrigerator. This appliance from time to time must power on to resettle the desired temperature. This could explain the periodic low power consumption peaks.
+4. The kitchen has got 2 peaks slightly before 18h. The first peak could be relative to the preparation of dinner (oven and/or microwave) and the second one to the cleaning (dishwasher). This would rule out the water heating possibility late in the afternoon for dish washing. Thus,
+1.v2. The water heater & AC usage late in the afternoon could be simply due to heating water due to showering or the habitants could have the habit of warming up their bedrooms/house in general before going to sleep to have a confortable temperature.
+
+The reasoning behind these conclusions are nothing but speculation. However, I can relate to the data shown meaning that no nonsence has been uncovered.
+
+**Visualization with plotly for a Week of your choosing:**
+Use all three sub-meters and make sure to label. Experiment with granularity. 
 
 
 
+**Create a visualization for a time period of your choice. **
+Both "Day" and "Week" highlight typical patterns in a home. What might be another period of time that could provide insights? Use plotly and experiment with granularity until you find the visualization that maximizes information gain for the viewer. 
+Experiment with seasons(quarters) and maybe months
+
+
+**Optional Work**
+Make some pie charts here or better yet, make a barplot or a treemap
