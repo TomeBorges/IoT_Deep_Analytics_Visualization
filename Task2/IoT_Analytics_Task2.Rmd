@@ -144,6 +144,7 @@ df <- df %>%
 df
 ```
 
+  
 I will now want to convert the new DateTime attribute to a DateTime data type called POSIXct. After converting to POSIXct we will add the time zone to prevent warning messages. The data description suggests that the data is from France.
 
 ```{r - Convert DateTime from character to POSIXct }
@@ -508,3 +509,41 @@ ggplot(data, aes(ymax=ymax, ymin=ymin, xmax=4, xmin=3, fill=category)) +
   theme(legend.position = "none")
 ```
 The conclusions taken on the above donut plot are similar to the ones above. The Water Heater & AC consume the most power out of all appliances in the house.
+
+
+*2. Prepare to analyze the data*
+
+```{r - Read the dataset from memory}
+df<-read.csv('household_power_consumption.csv')
+df
+```
+
+```{r - Prepare Date Time column and create additional time period separators for task 2}
+df <- cbind(df,DateTime = paste(df$Date,df$Time), stringsAsFactors=FALSE)
+df <- df %>%
+  select(X, DateTime, Sub_metering_1, Sub_metering_2, Sub_metering_3)
+df$DateTime <- as.POSIXct(df$DateTime, "%Y/%m/%d %H:%M:%S")
+
+df$quarter <- quarter(df$DateTime)
+df$month <- month(df$DateTime)
+df$week <- isoweek(df$DateTime)
+#In order to show week days in English instead of Portuguese (my original locale in RStudio) I will run the following command:
+Sys.setlocale("LC_TIME", "English")
+df$weekdays <- weekdays(df$DateTime)
+df$day <- day(df$DateTime)
+df$hour <- hour(df$DateTime)
+df$minute <- minute(df$DateTime)
+df
+```
+
+```{r - Subset to one observation per week on Mondays at 8:00pm for 2007, 2008 and 2009}
+house070809weekly <- filter(df, weekdays == 'Monday' & hour == 20 & minute == 1)
+house070809weekly
+```
+
+
+```{r}
+# Create TS object with SubMeter3
+tsSM3_070809weekly <- ts(house070809weekly$Sub_metering_3, frequency=52, start=c(2007,1))
+```
+
