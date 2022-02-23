@@ -315,11 +315,17 @@ The reasoning behind these conclusions are nothing but speculation. However, I c
 **Visualization with plotly for a Week of your choosing:**
 Use all three sub-meters and make sure to label. Experiment with granularity. 
 
+```{r}
+
+```
+
+
 ```{r - Subset the 2nd week (according to ISO system) of January 2008 - 60 Minute frequency}
 # Refilter the data with less granularity (only see one measurement every hour)
 houseWeek2 <- filter(df, year == 2008 & week == 2 & (minute == 0))
 houseWeek2
 ```
+
 ```{r - Plot sub-meter 1, 2 and 3 with title, legend and labels - 10 Minute frequency}
 plot_ly(houseWeek2, x = ~houseWeek2$DateTime, y = ~houseWeek2$Sub_metering_1, name = 'Kitchen', type = 'scatter', mode = 'lines') %>%
  add_trace(y = ~houseWeek2$Sub_metering_2, name = 'Laundry Room', mode = 'lines') %>%
@@ -337,21 +343,17 @@ Looking at the weekly plot, some takeaways can be taken:
 Both "Day" and "Week" highlight typical patterns in a home. What might be another period of time that could provide insights? Use plotly and experiment with granularity until you find the visualization that maximizes information gain for the viewer. 
 Experiment with seasons(quarters) and maybe months
 
-```{r}
-df
-```
-
 
 ```{r - Subset the 2nd week of January 2008 - 60 Minute frequency}
 # Refilter the data with less granularity (only see one measurement every hour)
-houseMonth2 <- filter(df, year == 2008 &  (hour == 12 & minute == 0))
-houseMonth2
+houseyear08 <- aggregate(cbind(Sub_metering_1,Sub_metering_2,Sub_metering_3)~day+month+DateTime, FUN=sum, data=filter(df, year == 2008 &  (hour == 12 & minute == 0)), na.rm=TRUE)
+houseyear08
 ```
 
 ```{r - Plot sub-meter 1, 2 and 3 with title, legend and labels - 10 Minute frequency}
-plot_ly(houseMonth2, x = ~houseMonth2$DateTime, y = ~houseMonth2$Sub_metering_1, name = 'Kitchen', type = 'scatter', mode = 'lines') %>%
- add_trace(y = ~houseMonth2$Sub_metering_2, name = 'Laundry Room', mode = 'lines') %>%
- add_trace(y = ~houseMonth2$Sub_metering_3, name = 'Water Heater & AC', mode = 'lines') %>%
+plot_ly(houseyear08, x = ~houseyear08$DateTime, y = ~houseyear08$Sub_metering_1, name = 'Kitchen', type = 'scatter', mode = 'lines') %>%
+ add_trace(y = ~houseyear08$Sub_metering_2, name = 'Laundry Room', mode = 'lines') %>%
+ add_trace(y = ~houseyear08$Sub_metering_3, name = 'Water Heater & AC', mode = 'lines') %>%
  layout(title = "Power Consumption January 9th, 2008",
  xaxis = list(title = "Time"),
  yaxis = list (title = "Power (watt-hours)"))
