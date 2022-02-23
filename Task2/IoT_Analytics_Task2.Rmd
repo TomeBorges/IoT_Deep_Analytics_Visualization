@@ -20,6 +20,7 @@ library(knitr)
 library(ggplot2)
 library(lubridate)
 library(plyr)
+library(plotly)
 
 
 library(gbm)
@@ -172,7 +173,7 @@ df
 ```{r - Create additional time period separators for task 2?}
 df$quarter <- quarter(df$DateTime)
 df$month <- month(df$DateTime)
-df$week <- week(df$DateTime)
+df$week <- isoweek(df$DateTime)
 #In order to show week days in English instead of Portuguese (my original locale in RStudio) I will run the following command:
 Sys.setlocale("LC_TIME", "English")
 df$weekdays <- weekdays(df$DateTime)
@@ -212,6 +213,7 @@ As can be seen above, we have counted 1440 rows, each corresponds to a minute of
 ```{r - Gather summary statistics}
 summary(df)
 ```
+
 ```{r - Mode for each column}
 Mode <- function(x) {
   ux <- unique(x)
@@ -220,6 +222,7 @@ Mode <- function(x) {
 
 apply(df, 2, Mode)
 ```
+
 ```{r}
 sd(df$Sub_metering_1)
 sd(df$Sub_metering_2)
@@ -250,9 +253,8 @@ plot(df$Sub_metering_1)
 Clearly this graph is not useful. As mentioned, above we have plotted "over 1,500,000 minutes from the beginning of 2007 though the end of 2009", this representation contains too granularity.
 
 ```{r - Plot all of sub-meter 1 with lower granularity (weekly or anything else)}
-
 # Aggregate over week number and climate division
-plot(aggregate(Sub_metering_1~Week, FUN=mean, data=df, na.rm=TRUE))
+plot(aggregate(Sub_metering_1~week, FUN=mean, data=df, na.rm=TRUE))
 ```
 
 **Study of subsetting and Meaningful Time Periods:**
@@ -289,6 +291,7 @@ This plot is much more revealing, but still quite grainy as can clearly be seen 
 ```{r - Subset the 9th day of January 2008 - 10 Minute frequency}
 # Refilter the data with less granularity (only see one measurement every 10 minutes)
 houseDay10 <- filter(df, year == 2008 & month == 1 & day == 9 & (minute == 0 | minute == 10 | minute == 20 | minute == 30 | minute == 40 | minute == 50))
+houseDay10
 ```
 
 ```{r - Plot sub-meter 1, 2 and 3 with title, legend and labels - 10 Minute frequency}
@@ -301,23 +304,199 @@ plot_ly(houseDay10, x = ~houseDay10$DateTime, y = ~houseDay10$Sub_metering_1, na
 ```
 This graph is identical to the one presented above but much clearer. In this case, "less is more" clearly. 
 From this visualization, conclusions such as the following can be taken:
-1. The water Heater & AC are mostly used in the morning and finally late in the afternoon. morning or late afternoon could contain the shower routine and consequently water heating. Additionaly plates must be washed at these times, so water heating is needed with or without showers.
+1. The water Heater & AC are mostly used in the morning and finally late in the evening. Morning or late evening could contain the shower routine and consequently water heating. Additionaly plates must be washed at these times, so water heating is needed with or without showers.
 2. The AC could be due to house usage and climatizaion during the day (after all this is a January day, so we are looking into a cold French Wednesday, AC heating might be needed to regain the heat lost during the night in the morning).
 3. The Laundry Room contains the refrigerator. This appliance from time to time must power on to resettle the desired temperature. This could explain the periodic low power consumption peaks.
 4. The kitchen has got 2 peaks slightly before 18h. The first peak could be relative to the preparation of dinner (oven and/or microwave) and the second one to the cleaning (dishwasher). This would rule out the water heating possibility late in the afternoon for dish washing. Thus,
-1.v2. The water heater & AC usage late in the afternoon could be simply due to heating water due to showering or the habitants could have the habit of warming up their bedrooms/house in general before going to sleep to have a confortable temperature.
+1.v2. The water heater & AC usage late in the evening could be simply due to heating water due to showering or the habitants could have the habit of warming up their bedrooms/house in general before going to sleep to have a confortable temperature.
 
 The reasoning behind these conclusions are nothing but speculation. However, I can relate to the data shown meaning that no nonsence has been uncovered.
 
 **Visualization with plotly for a Week of your choosing:**
 Use all three sub-meters and make sure to label. Experiment with granularity. 
 
-
+```{r - Subset the 2nd week (according to ISO system) of January 2008 - 60 Minute frequency}
+# Refilter the data with less granularity (only see one measurement every hour)
+houseWeek2 <- filter(df, year == 2008 & week == 2 & (minute == 0))
+houseWeek2
+```
+```{r - Plot sub-meter 1, 2 and 3 with title, legend and labels - 10 Minute frequency}
+plot_ly(houseWeek2, x = ~houseWeek2$DateTime, y = ~houseWeek2$Sub_metering_1, name = 'Kitchen', type = 'scatter', mode = 'lines') %>%
+ add_trace(y = ~houseWeek2$Sub_metering_2, name = 'Laundry Room', mode = 'lines') %>%
+ add_trace(y = ~houseWeek2$Sub_metering_3, name = 'Water Heater & AC', mode = 'lines') %>%
+ layout(title = "Power Consumption on the second week of 2008 (January 7th until the 13th)",
+ xaxis = list(title = "Time"),
+ yaxis = list (title = "Power (watt-hours)"))
+```
+Looking at the weekly plot, some takeaways can be taken:
+1. The only submeter that registers a somewhat constant power consumption is the water heater & AC. It seems that the inhabitants climatize their house and/or use hot water in the mornings for a long few hours (as was seen in the daily usage above) and in the evening.
+2. The laundry room has got periodic tiny usage peaks (possibly due to the refrigerator as mentioned above) and twice a week, it has large peaks possibly due to the usage of washing machine and tumble-drier.
+3. The kitchen has got some peaks which possibly coincide with meal cooking and dish washing. Note that the kitchen peaks only happen sporadically, this could be because the inhabitants went out for a meal (or were already out).
 
 **Create a visualization for a time period of your choice. **
 Both "Day" and "Week" highlight typical patterns in a home. What might be another period of time that could provide insights? Use plotly and experiment with granularity until you find the visualization that maximizes information gain for the viewer. 
 Experiment with seasons(quarters) and maybe months
 
+```{r}
+df
+```
+
+
+```{r - Subset the 2nd week of January 2008 - 60 Minute frequency}
+# Refilter the data with less granularity (only see one measurement every hour)
+houseMonth2 <- filter(df, year == 2008 &  (hour == 12 & minute == 0))
+houseMonth2
+```
+
+```{r - Plot sub-meter 1, 2 and 3 with title, legend and labels - 10 Minute frequency}
+plot_ly(houseMonth2, x = ~houseMonth2$DateTime, y = ~houseMonth2$Sub_metering_1, name = 'Kitchen', type = 'scatter', mode = 'lines') %>%
+ add_trace(y = ~houseMonth2$Sub_metering_2, name = 'Laundry Room', mode = 'lines') %>%
+ add_trace(y = ~houseMonth2$Sub_metering_3, name = 'Water Heater & AC', mode = 'lines') %>%
+ layout(title = "Power Consumption January 9th, 2008",
+ xaxis = list(title = "Time"),
+ yaxis = list (title = "Power (watt-hours)"))
+```
+
 
 **Optional Work**
 Make some pie charts here or better yet, make a barplot or a treemap
+
+```{r}
+
+# load library
+library(ggplot2)
+
+# Create test data.
+data <- data.frame(
+  category=c("A", "B", "C"),
+  count=c(10, 60, 30)
+)
+ 
+# Compute percentages
+data$fraction <- data$count / sum(data$count)
+
+# Compute the cumulative percentages (top of each rectangle)
+data$ymax <- cumsum(data$fraction)
+
+# Compute the bottom of each rectangle
+data$ymin <- c(0, head(data$ymax, n=-1))
+
+# Compute label position
+data$labelPosition <- (data$ymax + data$ymin) / 2
+
+# Compute a good label
+data$label <- paste0(data$category, "\n value: ", data$count)
+
+# Make the plot
+ggplot(data, aes(ymax=ymax, ymin=ymin, xmax=4, xmin=3, fill=category)) +
+  geom_rect() +
+  geom_label( x=3.5, aes(y=labelPosition, label=label), size=6) +
+  scale_fill_brewer(palette=4) +
+  coord_polar(theta="y") +
+  xlim(c(2, 4)) +
+  theme_void() +
+  theme(legend.position = "none")
+```
+
+
+
+```{r}
+
+# load library
+library(ggplot2)
+
+# Create test data.
+data <- data.frame(
+  category=c("A", "B", "C"),
+  count=c(10, 60, 30)
+)
+ 
+# Compute percentages
+data$fraction <- data$count / sum(data$count)
+
+# Compute the cumulative percentages (top of each rectangle)
+data$ymax <- cumsum(data$fraction)
+
+# Compute the bottom of each rectangle
+data$ymin <- c(0, head(data$ymax, n=-1))
+
+# Compute label position
+data$labelPosition <- (data$ymax + data$ymin) / 2
+
+# Compute a good label
+data$label <- paste0(data$category, "\n value: ", data$count)
+
+# Make the plot
+ggplot(data, aes(ymax=ymax, ymin=ymin, xmax=4, xmin=3, fill=category)) +
+  geom_rect() +
+  geom_text( x=2, aes(y=labelPosition, label=label, color=category), size=6) + # x here controls label position (inner / outer)
+  scale_fill_brewer(palette=3) +
+  scale_color_brewer(palette=3) +
+  coord_polar(theta="y") +
+  xlim(c(-1, 4)) +
+  theme_void() +
+  theme(legend.position = "none")
+```
+
+```{r}
+
+
+library(tidyverse)
+ 
+# Create data
+data <- data.frame(
+  x=LETTERS[1:26],
+  y=abs(rnorm(26))
+)
+ 
+# plot
+ggplot(data, aes(x=x, y=y)) +
+  geom_segment( aes(x=x, xend=x, y=0, yend=y)) +
+  geom_point( size=5, color="red", fill=alpha("orange", 0.3), alpha=0.7, shape=21, stroke=2) 
+```
+
+```{r}
+library(ggplot2)
+
+# Create data
+data <- data.frame(
+  x=LETTERS[1:26],
+  y=abs(rnorm(26))
+)
+
+# Plot
+ggplot(data, aes(x=x, y=y)) +
+  geom_segment( aes(x=x, xend=x, y=0, yend=y), color="grey") +
+  geom_point( color="orange", size=4) +
+  theme_light() +
+  theme(
+    panel.grid.major.x = element_blank(),
+    panel.border = element_blank(),
+    axis.ticks.x = element_blank()
+  ) +
+  xlab("") +
+  ylab("Value of Y")
+```
+
+```{r}
+library(ggplot2)
+
+# Create data
+data <- data.frame(
+  x=LETTERS[1:26],
+  y=abs(rnorm(26))
+)
+
+# Horizontal version
+ggplot(data, aes(x=x, y=y)) +
+  geom_segment( aes(x=x, xend=x, y=0, yend=y), color="skyblue") +
+  geom_point( color="blue", size=4, alpha=0.6) +
+  theme_light() +
+  coord_flip() +
+  theme(
+    panel.grid.major.y = element_blank(),
+    panel.border = element_blank(),
+    axis.ticks.y = element_blank()
+  )
+```
+
