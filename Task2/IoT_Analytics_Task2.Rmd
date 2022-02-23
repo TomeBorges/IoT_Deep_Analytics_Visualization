@@ -312,12 +312,49 @@ From this visualization, conclusions such as the following can be taken:
 
 The reasoning behind these conclusions are nothing but speculation. However, I can relate to the data shown meaning that no nonsence has been uncovered.
 
+
+Optional Work:
+
+Below I present an equivalent to a pie plot to observe how the power consumption is distributed through the rooms in this given day:
+```{r - Donut chart for power consumption in a single day}
+
+# load library
+library(ggplot2)
+
+# Create test data.
+data <- data.frame(
+  category=c("Kitchen", "Laundry", "WaterHeater/AC"),
+  count=c(sum(houseDay10$Sub_metering_1), sum(houseDay10$Sub_metering_2), sum(houseDay10$Sub_metering_3))
+)
+ 
+# Compute percentages
+data$fraction <- data$count / sum(data$count)
+
+# Compute the cumulative percentages (top of each rectangle)
+data$ymax <- cumsum(data$fraction)
+
+# Compute the bottom of each rectangle
+data$ymin <- c(0, head(data$ymax, n=-1))
+
+# Compute label position
+data$labelPosition <- c(0,1/5,1/2)#(data$ymax + data$ymin) / 2
+
+# Compute a good label
+data$label <- paste0(data$category, " value: ", data$count, "W/h \n(",round(data$fraction,2)*100,"%)")
+
+# Make the plot
+ggplot(data, aes(ymax=ymax, ymin=ymin, xmax=4, xmin=3, fill=category)) +
+  geom_rect() +
+  geom_label( x=3.5, aes(y=labelPosition, label=label), size=6) +
+  scale_fill_brewer(palette=4) +
+  coord_polar(theta="y") +
+  xlim(c(2, 4)) +
+  theme_void() +
+  theme(legend.position = "none")
+```
+As could be understood in previous graphs, the Water heater & AC are by far the appliances that spend the most power.
 **Visualization with plotly for a Week of your choosing:**
 Use all three sub-meters and make sure to label. Experiment with granularity. 
-
-```{r}
-
-```
 
 
 ```{r - Subset the 2nd week (according to ISO system) of January 2008 - 60 Minute frequency}
@@ -336,42 +373,21 @@ plot_ly(houseWeek2, x = ~houseWeek2$DateTime, y = ~houseWeek2$Sub_metering_1, na
 ```
 Looking at the weekly plot, some takeaways can be taken:
 1. The only submeter that registers a somewhat constant power consumption is the water heater & AC. It seems that the inhabitants climatize their house and/or use hot water in the mornings for a long few hours (as was seen in the daily usage above) and in the evening.
-2. The laundry room has got periodic tiny usage peaks (possibly due to the refrigerator as mentioned above) and twice a week, it has large peaks possibly due to the usage of washing machine and tumble-drier.
+2. The laundry room has got cyclic tiny usage peaks (possibly due to the refrigerator as mentioned above) and twice a week, it has large peaks possibly due to the usage of washing machine and tumble-drier.
 3. The kitchen has got some peaks which possibly coincide with meal cooking and dish washing. Note that the kitchen peaks only happen sporadically, this could be because the inhabitants went out for a meal (or were already out).
 
-**Create a visualization for a time period of your choice. **
-Both "Day" and "Week" highlight typical patterns in a home. What might be another period of time that could provide insights? Use plotly and experiment with granularity until you find the visualization that maximizes information gain for the viewer. 
-Experiment with seasons(quarters) and maybe months
+Optional Work:
 
-
-```{r - Subset the 2nd week of January 2008 - 60 Minute frequency}
-# Refilter the data with less granularity (only see one measurement every hour)
-houseyear08 <- aggregate(cbind(Sub_metering_1,Sub_metering_2,Sub_metering_3)~day+month+DateTime, FUN=sum, data=filter(df, year == 2008 &  (hour == 12 & minute == 0)), na.rm=TRUE)
-houseyear08
-```
-
-```{r - Plot sub-meter 1, 2 and 3 with title, legend and labels - 10 Minute frequency}
-plot_ly(houseyear08, x = ~houseyear08$DateTime, y = ~houseyear08$Sub_metering_1, name = 'Kitchen', type = 'scatter', mode = 'lines') %>%
- add_trace(y = ~houseyear08$Sub_metering_2, name = 'Laundry Room', mode = 'lines') %>%
- add_trace(y = ~houseyear08$Sub_metering_3, name = 'Water Heater & AC', mode = 'lines') %>%
- layout(title = "Power Consumption January 9th, 2008",
- xaxis = list(title = "Time"),
- yaxis = list (title = "Power (watt-hours)"))
-```
-
-
-**Optional Work**
-Make some pie charts here or better yet, make a barplot or a treemap
-
-```{r}
+Below I present an equivalent to a pie plot to observe how the power consumption is distributed through the rooms in this given day:
+```{r - Donut chart for power consumption in a single day}
 
 # load library
 library(ggplot2)
 
 # Create test data.
 data <- data.frame(
-  category=c("A", "B", "C"),
-  count=c(10, 60, 30)
+  category=c("Kitchen", "Laundry", "WaterHeater/AC"),
+  count=c(sum(houseWeek2$Sub_metering_1), sum(houseWeek2$Sub_metering_2), sum(houseWeek2$Sub_metering_3))
 )
  
 # Compute percentages
@@ -384,10 +400,10 @@ data$ymax <- cumsum(data$fraction)
 data$ymin <- c(0, head(data$ymax, n=-1))
 
 # Compute label position
-data$labelPosition <- (data$ymax + data$ymin) / 2
+data$labelPosition <- c(0,1/6,1/2)#(data$ymax + data$ymin) / 2
 
 # Compute a good label
-data$label <- paste0(data$category, "\n value: ", data$count)
+data$label <- paste0(data$category, " value: ", data$count, "W/h \n(",round(data$fraction,2)*100,"%)")
 
 # Make the plot
 ggplot(data, aes(ymax=ymax, ymin=ymin, xmax=4, xmin=3, fill=category)) +
@@ -400,17 +416,70 @@ ggplot(data, aes(ymax=ymax, ymin=ymin, xmax=4, xmin=3, fill=category)) +
   theme(legend.position = "none")
 ```
 
+```{r}
+data
+```
 
+
+**Create a visualization for a time period of your choice. **
+Both "Day" and "Week" highlight typical patterns in a home. 
+Another interesting visualization would be the yearly visualization to understand seasonal variations due to weather and temperature, which, in my opinion, is one factor that greatly affects power consumption in a typicall household.
+
+
+```{r - Subset the whole year of 2008 - 1 Day frequency}
+# Refilter the data with less granularity (only see one measurement every hour)
+houseYear08 <- filter(df, year == 2008 & (hour == 0 & minute == 0))
+houseYear08
+```
+
+```{r - Plot sub-meter 1, 2 and 3 with title, legend and labels - 10 Minute frequency}
+plot_ly(houseYear08, x = ~houseYear08$DateTime, y = ~houseYear08$Sub_metering_1, name = 'Kitchen', type = 'scatter', mode = 'lines') %>%
+ add_trace(y = ~houseYear08$Sub_metering_2, name = 'Laundry Room', mode = 'lines') %>%
+ add_trace(y = ~houseYear08$Sub_metering_3, name = 'Water Heater & AC', mode = 'lines') %>%
+ layout(title = "Power Consumption at midnightof everyday of 2008",
+ xaxis = list(title = "Time"),
+ yaxis = list (title = "Power (watt-hours)"))
+```
+In my opinion the graph above is worthless because it is only taking into account a given minute of all days of the year. No matter which minute I pick, hardly will it be a valid represtantion of the remaining 1439 minutes in a day for obvious reasons. Therefore, I believe that averaging out the power consumption through all minutes or adding up the values will be much more revealing.
+I will do this next:
+
+```{r - Sum power consumption of all days of 2008 - 1 day frequency}
+# Refilter the data with less granularity (only see one measurement every day)
+houseyear08_2 <- aggregate(cbind(Sub_metering_1,Sub_metering_2,Sub_metering_3)~day+month+year, FUN=sum, data=filter(df, year == 2008), na.rm=TRUE)
+houseyear08_2
+```
 
 ```{r}
+houseyear08_2 <- cbind(houseyear08_2,DateTime = paste(houseyear08_2$year,houseyear08$month,houseyear08$day), stringsAsFactors=FALSE)
+houseyear08_2$DateTime <- as.POSIXct(as.Date(houseyear08_2$DateTime, "%Y %m %d"))
+houseyear08_2
+```
+
+```{r - Plot sub-meter 1, 2 and 3 with title, legend and labels - 10 Minute frequency}
+plot_ly(houseyear08_2, x = ~houseyear08_2$DateTime, y = ~houseyear08_2$Sub_metering_1, name = 'Kitchen', type = 'scatter', mode = 'lines') %>%
+ add_trace(y = ~houseyear08_2$Sub_metering_2, name = 'Laundry Room', mode = 'lines') %>%
+ add_trace(y = ~houseyear08_2$Sub_metering_3, name = 'Water Heater & AC', mode = 'lines') %>%
+ layout(title = "Total daily Power Consumption throughout the year of 2008",
+ xaxis = list(title = "Time"),
+ yaxis = list (title = "Power (watt-hours)"))
+```
+This graph seems more relevant than the one above (it is best analysed with one line at a time).
+It seems that the family left the house somewhere in late February and in the whole August, the Power consumption fell in all submeters during these intervals.
+Regarding the Laundry Room and kitchen, nothing too relevant to notice. The users have a cyclic usage of the appliances in this room.
+Regarding the Water heater & AC it seems that during the summer months (disregarding AUgust because the users were absent) the usage is lower than in other months.
+
+Optional Work:
+
+Below I present an equivalent to a pie plot to observe how the power consumption is distributed through the rooms in this given day:
+```{r - Donut chart for power consumption in a single day}
 
 # load library
 library(ggplot2)
 
 # Create test data.
 data <- data.frame(
-  category=c("A", "B", "C"),
-  count=c(10, 60, 30)
+  category=c("Kitchen", "Laundry", "WaterHeater/AC"),
+  count=c(sum(houseyear08_2$Sub_metering_1), sum(houseyear08_2$Sub_metering_2), sum(houseyear08_2$Sub_metering_3))
 )
  
 # Compute percentages
@@ -423,82 +492,19 @@ data$ymax <- cumsum(data$fraction)
 data$ymin <- c(0, head(data$ymax, n=-1))
 
 # Compute label position
-data$labelPosition <- (data$ymax + data$ymin) / 2
+data$labelPosition <- c(0,1/6,1/2)#(data$ymax + data$ymin) / 2
 
 # Compute a good label
-data$label <- paste0(data$category, "\n value: ", data$count)
+data$label <- paste0(data$category, " value: ", data$count, "W/h \n(",round(data$fraction,2)*100,"%)")
 
 # Make the plot
 ggplot(data, aes(ymax=ymax, ymin=ymin, xmax=4, xmin=3, fill=category)) +
   geom_rect() +
-  geom_text( x=2, aes(y=labelPosition, label=label, color=category), size=6) + # x here controls label position (inner / outer)
-  scale_fill_brewer(palette=3) +
-  scale_color_brewer(palette=3) +
+  geom_label( x=3.5, aes(y=labelPosition, label=label), size=6) +
+  scale_fill_brewer(palette=4) +
   coord_polar(theta="y") +
-  xlim(c(-1, 4)) +
+  xlim(c(2, 4)) +
   theme_void() +
   theme(legend.position = "none")
 ```
-
-```{r}
-
-
-library(tidyverse)
- 
-# Create data
-data <- data.frame(
-  x=LETTERS[1:26],
-  y=abs(rnorm(26))
-)
- 
-# plot
-ggplot(data, aes(x=x, y=y)) +
-  geom_segment( aes(x=x, xend=x, y=0, yend=y)) +
-  geom_point( size=5, color="red", fill=alpha("orange", 0.3), alpha=0.7, shape=21, stroke=2) 
-```
-
-```{r}
-library(ggplot2)
-
-# Create data
-data <- data.frame(
-  x=LETTERS[1:26],
-  y=abs(rnorm(26))
-)
-
-# Plot
-ggplot(data, aes(x=x, y=y)) +
-  geom_segment( aes(x=x, xend=x, y=0, yend=y), color="grey") +
-  geom_point( color="orange", size=4) +
-  theme_light() +
-  theme(
-    panel.grid.major.x = element_blank(),
-    panel.border = element_blank(),
-    axis.ticks.x = element_blank()
-  ) +
-  xlab("") +
-  ylab("Value of Y")
-```
-
-```{r}
-library(ggplot2)
-
-# Create data
-data <- data.frame(
-  x=LETTERS[1:26],
-  y=abs(rnorm(26))
-)
-
-# Horizontal version
-ggplot(data, aes(x=x, y=y)) +
-  geom_segment( aes(x=x, xend=x, y=0, yend=y), color="skyblue") +
-  geom_point( color="blue", size=4, alpha=0.6) +
-  theme_light() +
-  coord_flip() +
-  theme(
-    panel.grid.major.y = element_blank(),
-    panel.border = element_blank(),
-    axis.ticks.y = element_blank()
-  )
-```
-
+The conclusions taken on the above donut plot are similar to the ones above. The Water Heater & AC consume the most power out of all appliances in the house.
