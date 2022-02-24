@@ -18,6 +18,10 @@ library(tidyverse)
 library(readxl)
 library(knitr)
 library(ggplot2)
+library(ggfortify)
+
+library(forecast)
+
 library(lubridate)
 library(plyr)
 library(plotly)
@@ -513,6 +517,7 @@ The conclusions taken on the above donut plot are similar to the ones above. The
 
 *2. Prepare to analyze the data*
 
+**Re-read the data**
 ```{r - Read the dataset from memory}
 df<-read.csv('household_power_consumption.csv')
 df
@@ -533,17 +538,113 @@ df$weekdays <- weekdays(df$DateTime)
 df$day <- day(df$DateTime)
 df$hour <- hour(df$DateTime)
 df$minute <- minute(df$DateTime)
+
+attr(df$DateTime, "tzone") <- "Europe/Paris"
+
 df
 ```
 
-```{r - Subset to one observation per week on Mondays at 8:00pm for 2007, 2008 and 2009}
+**Create time series and plot submeter3**
+```{r - Subset to one observation per week on Mondays at 8:00pm for 2007, 2008 and 2009 and create timeseries}
 house070809weekly <- filter(df, weekdays == 'Monday' & hour == 20 & minute == 1)
-house070809weekly
-```
-
-
-```{r}
-# Create TS object with SubMeter3
 tsSM3_070809weekly <- ts(house070809weekly$Sub_metering_3, frequency=52, start=c(2007,1))
 ```
 
+```{r - Plot sub-meter 3 with autoplot - add labels, color}
+autoplot(tsSM3_070809weekly, ts.colour = 'red', xlab = "Time", ylab = "Watt Hours", main = "Sub-meter 3 / Water Heater & AC")
+```
+```{r - Plot sub-meter 3 with plot.ts}
+plot.ts(tsSM3_070809weekly)
+```
+**Create time series and plot submeter2**
+```{r - Subset to one observation per week on Mondays at 8:00pm for 2007, 2008 and 2009 and create timeseries}
+house070809daily <- filter(df, hour == 18 & minute == 1)
+tsSM2_070809daily <- ts(house070809daily$Sub_metering_2, frequency=365, start=c(2007,1))
+```
+
+```{r - Plot sub-meter 2 with autoplot - add labels, color}
+autoplot(tsSM2_070809daily, ts.colour = 'red', xlab = "Time", ylab = "Watt Hours", main = "Sub-meter 2 / Laundry")
+```
+```{r - Plot sub-meter 2 with plot.ts}
+plot.ts(tsSM2_070809daily)
+```
+
+
+
+
+**Create time series and plot submeter1**
+```{r - Subset to one observation per week on Mondays at 8:00pm for 2007, 2008 and 2009 and create timeseries}
+house070809daily <- filter(df, hour == 18 & minute == 1)
+tsSM1_070809daily <- ts(house070809daily$Sub_metering_1, frequency=365, start=c(2007,1))
+```
+
+```{r - Plot sub-meter 1 with autoplot - add labels, color}
+autoplot(tsSM1_070809daily, ts.colour = 'red', xlab = "Time", ylab = "Watt Hours", main = "Sub-meter 1 / Kitchen")
+```
+```{r - Plot sub-meter 1 with plot.ts}
+plot.ts(tsSM1_070809daily)
+```
+
+
+*Forecasting time series*
+
+**Forecasting sub-meter 3:**
+```{r - Apply time series linear regression to the sub-meter 3 ts object and use summary to obtain R2 and RMSE from the model you built}
+fitSM3 <- tslm(tsSM3_070809weekly ~ trend + season) 
+summary(fitSM3)
+```
+
+```{r - Create and plot the forecast for sub-meter 3. Forecast ahead 20 time periods }
+forecastfitSM3 <- forecast(fitSM3, h=20)
+plot(forecastfitSM3)
+```
+Linear regression does not respect the bounds of 0. It's linear, always and everywhere. It may not be appropriate for values that need to be close to 0 but are strictly positive.
+
+Therefore, I will now limit the lower bound to zero and increase confidence levels:
+```{r - Create and plot sub-meter 3 forecast with confidence levels 80 and 90}
+forecastfitSM3c <- forecast(fitSM3, h=20, level=c(80,90))
+
+plot(forecastfitSM3c, ylim = c(0, 20), ylab= "Watt-Hours", xlab="Time")
+```
+
+
+**Forecasting sub-meter 2:**
+```{r - Apply time series linear regression to the sub-meter 3 ts object and use summary to obtain R2 and RMSE from the model you built}
+fitSM2 <- tslm(tsSM2_070809daily ~ trend + season) 
+summary(fitSM2)
+```
+
+```{r - Create and plot the forecast for sub-meter 2. Forecast ahead 50 time periods }
+forecastfitSM2 <- forecast(fitSM2, h=50)
+plot(forecastfitSM2)
+```
+Linear regression does not respect the bounds of 0. It's linear, always and everywhere. It may not be appropriate for values that need to be close to 0 but are strictly positive.
+
+Therefore, I will now limit the lower bound to zero and increase confidence levels:
+```{r - Create and plot sub-meter 2 forecast with confidence levels 80 and 90}
+forecastfitSM2c <- forecast(fitSM2, h=50, level=c(80,90))
+
+plot(forecastfitSM2c, ylim = c(0, 20), ylab= "Watt-Hours", xlab="Time")
+```
+As we increase the confidence level, say from 95% to 99%, our range becomes wider.
+Therefore I decided to keep the confidence level at the recommended levels (between 80% and 90%).
+
+
+**Forecasting sub-meter 1:**
+```{r - Apply time series linear regression to the sub-meter 1 ts object and use summary to obtain R2 and RMSE from the model you built}
+fitSM1 <- tslm(tsSM1_070809daily ~ trend + season) 
+summary(fitSM1)
+```
+
+```{r - Create and plot the forecast for sub-meter 1. Forecast ahead 20 time periods }
+forecastfitSM1 <- forecast(fitSM1, h=50)
+plot(forecastfitSM1)
+```
+Linear regression does not respect the bounds of 0. It's linear, always and everywhere. It may not be appropriate for values that need to be close to 0 but are strictly positive.
+
+Therefore, I will now limit the lower bound to zero and increase confidence levels:
+```{r - Create and plot sub-meter 1 forecast with confidence levels 80 and 90}
+forecastfitSM1c <- forecast(fitSM1, h=50, level=c(80,90))
+
+plot(forecastfitSM1c, ylim = c(0, 20), ylab= "Watt-Hours", xlab="Time")
+```
