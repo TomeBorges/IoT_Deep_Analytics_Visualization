@@ -648,3 +648,5 @@ forecastfitSM1c <- forecast(fitSM1, h=50, level=c(80,90))
 
 plot(forecastfitSM1c, ylim = c(0, 20), ylab= "Watt-Hours", xlab="Time")
 ```
+
+**Comparison chart showing the R2 and RMSE of each model I built:**
