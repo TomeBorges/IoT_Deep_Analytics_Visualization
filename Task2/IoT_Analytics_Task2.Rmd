@@ -691,19 +691,98 @@ summary(components070809SM1daily)
 ```{r - Decompose Sub-meter 2 into trend, seasonal and remainder}
 
 par(mfrow=c(3,1))
-plot(components070809SM1daily$trend, type ='l',col="red" )
-plot(components070809SM2daily$trend, type ='l',col="green" )
-plot(components070809SM3weekly$trend, type ='l',col="blue" )
+plot(components070809SM1daily$trend, type ='l',col="red")
+plot(components070809SM2daily$trend, type ='l',col="green")
+plot(components070809SM3weekly$trend, type ='l',col="blue")
 
 
 ```
-```{r}
 
-ggplot(components070809SM1daily,aes(x,y))+geom_line(aes(color="First line"))+
-  geom_line(data=df2,aes(color="Second line"))+
-  labs(color="Legend text")
+*Holt-Winters Forecasting*
 
+To use HoltWinters() and forecasting you will first need to remove the seasonal component that you identified via decomposition. You can use seasonal adjusting for this as seen in the Little Book of R for Time Series.
+
+**Remove Seasonal Components**
+Sub-meter 3:
+```{r - Seasonal adjusting sub-meter 3 by subtracting the seasonal component & plot}
+tsSM3_070809Adjusted <- tsSM3_070809weekly - components070809SM3weekly$seasonal
+autoplot(tsSM3_070809Adjusted)
+```
+```{r - Test Seasonal Adjustment by running Decompose again. Note the very, very small scale for Seasonal}
+plot(decompose(tsSM3_070809Adjusted))
+```
+
+We have a seasonal line, but looing  at the scale for the seasonal section: -1e-15 through 5e-16, we see that it is irrelevant.
+
+Sub-meter 2:
+```{r - Seasonal adjusting sub-meter 2 by subtracting the seasonal component & plot}
+tsSM2_070809Adjusted <- tsSM2_070809daily - components070809SM2daily$seasonal
+autoplot(tsSM2_070809Adjusted)
+```
+```{r - Test Seasonal Adjustment by running Decompose again. Note the very, very small scale for Seasonal}
+plot(decompose(tsSM2_070809Adjusted))
+```
+Sub-meter 1:
+```{r - Seasonal adjusting sub-meter 1 by subtracting the seasonal component & plot}
+tsSM1_070809Adjusted <- tsSM1_070809daily - components070809SM1daily$seasonal
+autoplot(tsSM1_070809Adjusted)
+```
+```{r - Test Seasonal Adjustment by running Decompose again. Note the very, very small scale for Seasonal}
+plot(decompose(tsSM1_070809Adjusted))
 ```
 
 
+**HoltWinters Simple Exponential Smoothing:**
 
+Sub-meter 3:
+```{r - Holt Winters Exponential Smoothing & Plot}
+tsSM3_HW070809 <- HoltWinters(tsSM3_070809Adjusted, beta=FALSE, gamma=FALSE)
+plot(tsSM3_HW070809, ylim = c(0, 25))
+```
+
+Sub-meter 2:
+```{r - Holt Winters Exponential Smoothing & Plot}
+tsSM2_HW070809 <- HoltWinters(tsSM2_070809Adjusted, beta=FALSE, gamma=FALSE)
+plot(tsSM2_HW070809, ylim = c(0, 30))
+```
+Sub-meter 1:
+```{r - Holt Winters Exponential Smoothing & Plot}
+tsSM1_HW070809 <- HoltWinters(tsSM1_070809Adjusted, beta=FALSE, gamma=FALSE)
+plot(tsSM1_HW070809, ylim = c(0, 25))
+```
+
+**HoltWinters Forecast:**
+Sub-meter 3:
+```{r - HoltWinters forecast & plot}
+tsSM3_HW070809for <- forecast(tsSM3_HW070809, h=25)
+plot(tsSM3_HW070809for, ylim = c(0, 20), ylab= "Watt-Hours", xlab="Time - Sub-meter 3")
+```
+
+```{r - Forecast HoltWinters with diminished confidence levels and plot forecasted area}
+tsSM3_HW070809forC <- forecast(tsSM3_HW070809, h=25, level=c(10,25))
+plot(tsSM3_HW070809forC, ylim = c(0, 20), ylab= "Watt-Hours", xlab="Time - Sub-meter 3", start(2010))
+```
+
+
+Sub-meter 2:
+```{r - HoltWinters forecast & plot}
+tsSM2_HW070809for <- forecast(tsSM2_HW070809, h=25)
+plot(tsSM2_HW070809for, ylim = c(0, 20), ylab= "Watt-Hours", xlab="Time - Sub-meter 2")
+```
+
+```{r - Forecast HoltWinters with diminished confidence levels and plot forecasted area}
+tsSM2_HW070809forC <- forecast(tsSM2_HW070809, h=25, level=c(10,25))
+plot(tsSM2_HW070809forC, ylim = c(0, 20), ylab= "Watt-Hours", xlab="Time - Sub-meter 2", start(2010))
+```
+
+
+Sub-meter 1:
+```{r - HoltWinters forecast & plot}
+tsSM1_HW070809for <- forecast(tsSM1_HW070809, h=25)
+plot(tsSM1_HW070809for, ylim = c(0, 20), ylab= "Watt-Hours", xlab="Time - Sub-meter 1")
+```
+
+```{r - Forecast HoltWinters with diminished confidence levels and plot forecasted area}
+tsSM1_HW070809forC <- forecast(tsSM1_HW070809, h=25, level=c(10,25))
+plot(tsSM1_HW070809forC, ylim = c(0, 20), ylab= "Watt-Hours", xlab="Time - Sub-meter 1", start(2010))
+```
