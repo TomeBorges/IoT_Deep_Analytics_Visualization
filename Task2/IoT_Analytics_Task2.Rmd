@@ -558,7 +558,7 @@ plot.ts(tsSM3_070809weekly)
 ```
 **Create time series and plot submeter2**
 ```{r - Subset to one observation per week on Mondays at 8:00pm for 2007, 2008 and 2009 and create timeseries}
-house070809daily <- filter(df, hour == 18 & minute == 1)
+house070809daily <- filter(df, hour == 15 & minute == 1)
 tsSM2_070809daily <- ts(house070809daily$Sub_metering_2, frequency=365, start=c(2007,1))
 ```
 
@@ -569,12 +569,9 @@ autoplot(tsSM2_070809daily, ts.colour = 'red', xlab = "Time", ylab = "Watt Hours
 plot.ts(tsSM2_070809daily)
 ```
 
-
-
-
 **Create time series and plot submeter1**
 ```{r - Subset to one observation per week on Mondays at 8:00pm for 2007, 2008 and 2009 and create timeseries}
-house070809daily <- filter(df, hour == 18 & minute == 1)
+house070809daily <- filter(df, hour == 12 & minute == 1)
 tsSM1_070809daily <- ts(house070809daily$Sub_metering_1, frequency=365, start=c(2007,1))
 ```
 
@@ -593,7 +590,7 @@ plot.ts(tsSM1_070809daily)
 fitSM3 <- tslm(tsSM3_070809weekly ~ trend + season) 
 summary(fitSM3)
 ```
-
+P-value is basically 5% which can be considered statistically significant, therefore this model is valid.
 ```{r - Create and plot the forecast for sub-meter 3. Forecast ahead 20 time periods }
 forecastfitSM3 <- forecast(fitSM3, h=20)
 plot(forecastfitSM3)
@@ -636,7 +633,7 @@ fitSM1 <- tslm(tsSM1_070809daily ~ trend + season)
 summary(fitSM1)
 ```
 
-```{r - Create and plot the forecast for sub-meter 1. Forecast ahead 20 time periods }
+```{r - Create and plot the forecast for sub-meter 1. Forecast ahead 50 time periods }
 forecastfitSM1 <- forecast(fitSM1, h=50)
 plot(forecastfitSM1)
 ```
@@ -650,3 +647,63 @@ plot(forecastfitSM1c, ylim = c(0, 20), ylab= "Watt-Hours", xlab="Time")
 ```
 
 **Comparison chart showing the R2 and RMSE of each model I built:**
+
+
+```{r}
+
+Results_Models <- data.frame(
+  category=c("Kitchen", "Laundry", "WaterHeater/AC"),
+  RMSE = c(sqrt(mean(fitSM1$residuals^2)), sqrt(mean(fitSM2$residuals^2)), sqrt(mean(fitSM3$residuals^2))),
+  RSquared=c(summary(fitSM1)$r.squared, summary(fitSM2)$r.squared, summary(fitSM3)$r.squared)
+)
+Results_Models
+
+```
+*Decomposing a Seasonal Time Series*
+
+```{r - Decompose Sub-meter 3 into trend, seasonal and remainder}
+components070809SM3weekly <- decompose(tsSM3_070809weekly)
+## Plot decomposed sub-meter 3 
+plot(components070809SM3weekly)
+## Check summary statistics for decomposed sub-meter 3 
+summary(components070809SM3weekly)
+```
+
+```{r - Decompose Sub-meter 2 into trend, seasonal and remainder}
+components070809SM2daily <- decompose(tsSM2_070809daily)
+## Plot decomposed sub-meter 2
+plot(components070809SM2daily)
+## Check summary statistics for decomposed sub-meter 2
+summary(components070809SM2daily)
+```
+
+
+
+```{r - Decompose Sub-meter 1 into trend, seasonal and remainder}
+components070809SM1daily <- decompose(tsSM1_070809daily)
+## Plot decomposed sub-meter 1
+plot(components070809SM1daily)
+## Check summary statistics for decomposed sub-meter 1
+summary(components070809SM1daily)
+```
+
+**Trend comparison**
+```{r - Decompose Sub-meter 2 into trend, seasonal and remainder}
+
+par(mfrow=c(3,1))
+plot(components070809SM1daily$trend, type ='l',col="red" )
+plot(components070809SM2daily$trend, type ='l',col="green" )
+plot(components070809SM3weekly$trend, type ='l',col="blue" )
+
+
+```
+```{r}
+
+ggplot(components070809SM1daily,aes(x,y))+geom_line(aes(color="First line"))+
+  geom_line(data=df2,aes(color="Second line"))+
+  labs(color="Legend text")
+
+```
+
+
+
