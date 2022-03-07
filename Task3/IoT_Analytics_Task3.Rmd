@@ -1,0 +1,804 @@
+---
+title: "Task 2: Visualize and Analyze Energy Data"
+output: html_notebook
+---
+
+This notebook contains the answers to Task 2: Visualize and Analyze Energy Data.
+
+Notes for next tasks:
+-Remember to see prophet tool by Facebook
+-Be careful with trends, seasonality, and cycles in the data. I must be careful about this when doing time series forecasting. Verifiy if the three components react in an additive (variations stay fixed throughout time) or multiplicative (variations grow larger) way, I should handle data differently.
+
+```{r - Initial imports}
+library(RMySQL)
+
+library(caret)
+
+library(tidyverse)
+library(readxl)
+library(knitr)
+library(ggplot2)
+library(ggfortify)
+
+library(forecast)
+
+library(lubridate)
+library(plyr)
+library(plotly)
+
+
+library(gbm)
+library(Rcpp)
+```
+
+
+*Retrieve data*
+
+
+This archive contains 2075259 measurements (when retrieved through the SQL databse we have only 2049280 observations) gathered in a house located in Sceaux (7km of Paris, France) between December 2006 and November 2010 (47 months).
+Notes:
+1.(global_active_power*1000/60 - sub_metering_1 - sub_metering_2 - sub_metering_3) represents the active energy consumed every minute (in watt hour) in the household by electrical equipment not measured in sub-meterings 1, 2 and 3.
+2.The dataset contains some missing values in the measurements (nearly 1,25% of the rows). All calendar timestamps are present in the dataset but for some timestamps, the measurement values are missing: a missing value is represented by the absence of value between two consecutive semi-colon attribute separators. For instance, the dataset shows missing values on April 28, 2007.
+
+**Retrieve data from a database:**
+```{r - Create a database connection & list the tables contained in it}
+con = dbConnect(MySQL(), user='deepAnalytics', password='Sqltask1234!', dbname='dataanalytics2018', host='data-analytics-2018.cbrosir2cswx.us-east-1.rds.amazonaws.com')
+
+dbListTables(con)
+```
+
+```{r - Lists attributes contained in a table and confirm that all tables are in the same format}
+dbListFields(con,'yr_2006')
+
+(dbListFields(con,'yr_2006') == dbListFields(con,'yr_2007')) && (dbListFields(con,'yr_2006') == dbListFields(con,'yr_2008')) && (dbListFields(con,'yr_2006') == dbListFields(con,'yr_2008')) && (dbListFields(con,'yr_2006') == dbListFields(con,'yr_2009')) && (dbListFields(con,'yr_2006') == dbListFields(con,'yr_2010'))
+```
+
+```{r - Query databse to download data of all available years}
+## Use asterisk to specify all attributes for download
+yr_2006 <- dbGetQuery(con, "SELECT Date, Time, Sub_metering_1, Sub_metering_2, Sub_metering_3 FROM yr_2006")
+yr_2007 <- dbGetQuery(con, "SELECT Date, Time, Sub_metering_1, Sub_metering_2, Sub_metering_3 FROM yr_2007")
+yr_2008 <- dbGetQuery(con, "SELECT Date, Time, Sub_metering_1, Sub_metering_2, Sub_metering_3 FROM yr_2008")
+yr_2009 <- dbGetQuery(con, "SELECT Date, Time, Sub_metering_1, Sub_metering_2, Sub_metering_3 FROM yr_2009")
+yr_2010 <- dbGetQuery(con, "SELECT Date, Time, Sub_metering_1, Sub_metering_2, Sub_metering_3 FROM yr_2010")
+```
+
+We have queried each year individually. The datasets contain 21992, 521669, 526905, 521320 and 457394 entries respectively.
+Now I will investigate each dataframe individually to verify that each covers a whole year:
+
+```{r - Look into dataframe from 2006:}
+str(yr_2006)
+summary(yr_2006)
+head(yr_2006[order(yr_2006$Date),]) #order applied in case data didn't come ordered from database
+tail(yr_2006[order(yr_2006$Date),]) #order applied in case data didn't come ordered from database
+```
+```{r - Look into dataframe from 2007:}
+str(yr_2007)
+summary(yr_2007)
+head(yr_2007[order(yr_2007$Date),]) #order applied in case data didn't come ordered from database
+tail(yr_2007[order(yr_2007$Date),]) #order applied in case data didn't come ordered from database
+```
+```{r - Look into dataframe from 2008:}
+str(yr_2008)
+summary(yr_2008)
+head(yr_2008[order(yr_2008$Date),]) #order applied in case data didn't come ordered from database
+tail(yr_2008[order(yr_2008$Date),]) #order applied in case data didn't come ordered from database
+```
+```{r - Look into dataframe from 2009:}
+str(yr_2009)
+summary(yr_2009)
+head(yr_2009[order(yr_2009$Date),]) #order applied in case data didn't come ordered from database
+tail(yr_2009[order(yr_2009$Date),]) #order applied in case data didn't come ordered from database
+```
+```{r - Look into dataframe from 2010:}
+str(yr_2010)
+summary(yr_2010)
+head(yr_2010[order(yr_2010$Date),]) #order applied in case data didn't come ordered from database
+tail(yr_2010[order(yr_2010$Date),]) #order applied in case data didn't come ordered from database
+```
+
+
+All dataframes contain a whole year of data, except for the first and last. The first dataset starts at December 16 and the last one ends in November 26. Anyhow, we have got a continuous dataflow from 16th December 2006 until 26th November 2010.
+Therefore lets join the individual dataframes into a single one to make it more manageable:
+
+```{r - Combine tables into one dataframe using dplyr}
+df <- bind_rows(yr_2006, yr_2007, yr_2008, yr_2009, yr_2010)
+```
+
+```{r - Confirm if dates are in the correct order:}
+str(df)
+summary(df)
+head(df)
+tail(df)
+```
+
+Note: In order to avoid downloading each individual yearly dataframe, which is a slow process (maybe due to my internet connection), I will save it into memory therefore, next time I work on this project again (after wiping the computer's RAM memory clean) I can simply load it from memory.
+
+```{r - Save df into memory}
+write.csv(df, "household_power_consumption.csv")
+```
+
+
+**Retrieve data from memory:**
+```{r - Read the dataset from memory}
+df<-read.csv('household_power_consumption.csv')
+df
+```
+
+
+*Preprocess the data:*
+
+Since the Date and Time columns are separate they will need to be combined within the dataset in order to convert them to the correct format to complete the appropriate analysis:
+
+```{r - Combine Date and Time attribute values in a new attribute column "DataTime"}
+df <- cbind(df,DateTime = paste(df$Date,df$Time), stringsAsFactors=FALSE)
+#Note: Alternatively I could edit the column name with the command below (if I downloaded more than 5 attributes I need to change the column number)
+#colnames(yourdataframe)[6] <-"DateTime"
+
+df
+```
+
+No need to keep the "Date" and "Time" individual columns, I will also remove these.
+```{r - Move the DateTime attribute within the dataset and drop "Date" & "Time" columns}
+#I could do this as suggested in the PoA
+#df <- df[,c(ncol(df), 1:(ncol(df)-1))]
+#head(df)
+#But also, I can drop "Date" and "Time" columns therefore I will do these two things at once:
+df <- df %>%
+  select(X, DateTime, Sub_metering_1, Sub_metering_2, Sub_metering_3)
+df
+```
+
+  
+I will now want to convert the new DateTime attribute to a DateTime data type called POSIXct. After converting to POSIXct we will add the time zone to prevent warning messages. The data description suggests that the data is from France.
+
+```{r - Convert DateTime from character to POSIXct }
+## 
+df$DateTime <- as.POSIXct(df$DateTime, "%Y/%m/%d %H:%M:%S")
+```
+The warning "unknown timezone '%Y/%m/%d %H:%M:%S'unknown timezone '%Y/%m/%d %H:%M:%S'" will be solved with the chunk below.
+
+
+```{r - Add the time zone}
+attr(df$DateTime, "tzone") <- "Europe/Paris"
+```
+
+```{r - Inspect the data types}
+str(df)
+```
+
+Now, the DateTime is in the correct data type for its content, it is of POSIXct (POSIX calendar time)
+
+Now, I will prepare Lubridate to extract DateTime information into individual attributes like Year and Month. These attributes can be used by dplyr's filter command to subset the data into useful data sets for visualization. The subsetting will be done in Task 2 of Course 3, but let's prepare the new attributes now. 
+I will start with extracting "Year" information from DateTime using the Lubridate "year" function and create an attribute for year
+```{r - Create "year" attribute with lubridate}
+df$year <- year(df$DateTime)
+df
+```
+
+```{r - Create additional time period separators for task 2?}
+df$quarter <- quarter(df$DateTime)
+df$month <- month(df$DateTime)
+df$week <- isoweek(df$DateTime)
+#In order to show week days in English instead of Portuguese (my original locale in RStudio) I will run the following command:
+Sys.setlocale("LC_TIME", "English")
+df$weekdays <- weekdays(df$DateTime)
+df$day <- day(df$DateTime)
+df$hour <- hour(df$DateTime)
+df$minute <- minute(df$DateTime)
+df
+```
+
+*Initial Data exploration of the data:*
+
+According to the documentation, here follows a brief overview of each column:
+1.date: Date in format dd/mm/yyyy (now date part of DateTime column)
+2.time: time in format hh:mm:ss (now date part of DateTime column)
+..
+7.sub_metering_1: energy sub-metering No. 1 (in watt-hour of active energy). It corresponds to the *kitchen*, containing mainly a dishwasher, an oven and a microwave (hot plates are not electric but gas powered).
+8.sub_metering_2: energy sub-metering No. 2 (in watt-hour of active energy). It corresponds to the *laundry room*, containing a washing-machine, a tumble-drier, a refrigerator and a light.
+9.sub_metering_3: energy sub-metering No. 3 (in watt-hour of active energy). It corresponds to an *electric water-heater* and an *air-conditioner*.
+
+Additionaly, according to the documentation, the dataset contains missing values in the measurements (nearly 1.25% of the rows), let's analyse this. In particular I will look into April 28, 2007 (which is the missing example the documentation mentioned):
+```{r - Are there missing values?}
+any(is.na(df))
+```
+
+```{r - Which columns have null values:}
+names(which(colSums(is.na(df)) > 0))
+```
+
+It seems we haven't got any missing values according to R. Looking closely at the documentation, it is said that out of the original 2075259 rows, nearly 1.25% of the rows are missing. Therefore, we should have the following filled rows 2075259*(1-0.0125) = 2049318.2625, which is close to what was downloaded, therefore it seems that the downloaded version has been cleaned of missing values.
+The last test is to look at April 28, 2007 and see how many rows do we have:
+```{r}
+subset(df, DateTime>= "2007-05-28" & DateTime < "2007-05-29")
+```
+As can be seen above, we have counted 1440 rows, each corresponds to a minute of the day which corresponds to 24 complete hours (1440 mins / 60 mins = 24 hours) or, putting it differently, to a whole day. I can conclude that we do not have the missings that the documentation was referring to.
+
+
+```{r - Gather summary statistics}
+summary(df)
+```
+
+```{r - Mode for each column}
+Mode <- function(x) {
+  ux <- unique(x)
+  ux[which.max(tabulate(match(x, ux)))]
+}
+
+apply(df, 2, Mode)
+```
+
+```{r}
+sd(df$Sub_metering_1)
+sd(df$Sub_metering_2)
+sd(df$Sub_metering_3)
+
+```
+
+Using the summary function, a few conclusions can be taken. For the sub-metering groups, the minimum value does not contain any useful information, it is always null, which makes sense because no single house room is constantly consuming energy in a common household.
+Now, going into further detail:
+- Sub_metering_1, which correspondes to the kitchen, has got the lowest consumption of all groups. This group contains the lowest 3rd quantile and mean value. On the other hand, it contains the highest maximum value. A possibility for this fact could be due to when a person uses the kitchen to cook, typically more than one appliance is used and more intensively, the same is not necessarily true for the remaining sub_metering groups.
+- Sub_metering_2, which corresponds to the laundry room, has got a higher 3rd quartile and mean than the first group. This suggests that the set of appliances measured in this group is in usage for longer periods of times. The maximum value though, is slightly lower than the kitchen froup suggesting less intensive usage of this room.
+- Lastly, the sub_metering_3 group, referring to the electric water-heater and air-conditioner has got a much higher mean, median and 3rd quartile. Inline with the second group, this fact suggests that the 3rd group requires a much more prolonged usage. However, the maximum value is the lowest of all groups suggesting that this last group seldom has any peak usage. This makes sense because this appliances are supposed to be used continuously without requiring large energetic efforts.
+
+In order to improve the quality of this dataset and consequently the analysis, one could:
+1. The important thing to discover trends, cycles or seasonality in the power usage values for this home. With this in mind, it is important to resample the dataset according to different time frequency. In this case specifically we have received a dataset detailed up to the minute, therefore it is simple to resample the data (group data points) to larger time spans. In the next task I will investigate whether grouping data points by hour (and maybe day day times such as morning, midday, afternoon, evening, night time), day, week, month, quarter (4 seasons basically) and even year. Looking towards data according to these different time samplings will surely be helpful to look at the data from different perspectives and will help to find trends, cycles or seasonality.
+2. Instead of separating the sub-metering groups per room, one could separate according per usage intensity. This way, such an analysis would reveal further information about each type of appliance instead of room usage. The first group could contain continuously used appliances, such as the AC, water heater or fridge. The second could contain appliances not so frequently used, but when used these take a long time running, such as the dishwasher, washing machine or tumble-drier. And finally sporadically used appliances such as the microwave or the lights. This alternative grouping seems to be as valid as the original one, but the conclusions taken would be slightly different.
+  2.1.Alternatively, if each sub-meter had a different "channel", one for each appliance this problem would also be solved as one could look into each appliance individually. This way, the clients could find the least efficient appliances and find a replacement for these or try using it more responsibly.
+
+
+
+*Visualize the data*
+
+**Study of granularity:**
+```{r - Plot all of sub-meter 1}
+plot(df$Sub_metering_1)
+```
+
+Clearly this graph is not useful. As mentioned, above we have plotted "over 1,500,000 minutes from the beginning of 2007 though the end of 2009", this representation contains too granularity.
+
+```{r - Plot all of sub-meter 1 with lower granularity (weekly or anything else)}
+# Aggregate over week number and climate division
+plot(aggregate(Sub_metering_1~week, FUN=mean, data=df, na.rm=TRUE))
+```
+
+**Study of subsetting and Meaningful Time Periods:**
+```{r - Subset the second week of 2008 - All Observations}
+houseWeek <- filter(df, year == 2008 & week == 2)
+## Plot subset houseWeek
+plot(houseWeek$Sub_metering_1)
+```
+
+As suggested, even though this graph is more revealing, too much information is still present here.
+
+**Study of visualizing a Single Day with Plotly:**
+
+```{r - Subset the 9th day of January 2008 - All observations}
+## 
+houseDay <- filter(df, year == 2008 & month == 1 & day == 9)
+## Plot sub-meter 1
+plot_ly(houseDay, x = ~houseDay$DateTime, y = ~houseDay$Sub_metering_1, type = 'scatter', mode = 'lines')
+```
+
+Line plots seem to be better suited for this task, because, similarly to time, this is a continuous representation of the time series data. The previous dotted plots were discrete and less obvious for this task.
+
+```{r - Plot sub-meter 1, 2 and 3 with title, legend and labels - All observations }
+plot_ly(houseDay, x = ~houseDay$DateTime, y = ~houseDay$Sub_metering_1, name = 'Kitchen', type = 'scatter', mode = 'lines') %>%
+ add_trace(y = ~houseDay$Sub_metering_2, name = 'Laundry Room', mode = 'lines') %>%
+ add_trace(y = ~houseDay$Sub_metering_3, name = 'Water Heater & AC', mode = 'lines') %>%
+ layout(title = "Power Consumption January 9th, 2008",
+ xaxis = list(title = "Time"),
+ yaxis = list (title = "Power (watt-hours)"))
+```
+
+This plot is much more revealing, but still quite grainy as can clearly be seen in the water heater & AC peak usages. Now, I will reduce granularity from one observation per minute to one observation every 10 minytes:
+
+```{r - Subset the 9th day of January 2008 - 10 Minute frequency}
+# Refilter the data with less granularity (only see one measurement every 10 minutes)
+houseDay10 <- filter(df, year == 2008 & month == 1 & day == 9 & (minute == 0 | minute == 10 | minute == 20 | minute == 30 | minute == 40 | minute == 50))
+houseDay10
+```
+
+```{r - Plot sub-meter 1, 2 and 3 with title, legend and labels - 10 Minute frequency}
+plot_ly(houseDay10, x = ~houseDay10$DateTime, y = ~houseDay10$Sub_metering_1, name = 'Kitchen', type = 'scatter', mode = 'lines') %>%
+ add_trace(y = ~houseDay10$Sub_metering_2, name = 'Laundry Room', mode = 'lines') %>%
+ add_trace(y = ~houseDay10$Sub_metering_3, name = 'Water Heater & AC', mode = 'lines') %>%
+ layout(title = "Power Consumption January 9th, 2008",
+ xaxis = list(title = "Time"),
+ yaxis = list (title = "Power (watt-hours)"))
+```
+This graph is identical to the one presented above but much clearer. In this case, "less is more" clearly. 
+From this visualization, conclusions such as the following can be taken:
+1. The water Heater & AC are mostly used in the morning and finally late in the evening. Morning or late evening could contain the shower routine and consequently water heating. Additionaly plates must be washed at these times, so water heating is needed with or without showers.
+2. The AC could be due to house usage and climatizaion during the day (after all this is a January day, so we are looking into a cold French Wednesday, AC heating might be needed to regain the heat lost during the night in the morning).
+3. The Laundry Room contains the refrigerator. This appliance from time to time must power on to resettle the desired temperature. This could explain the periodic low power consumption peaks.
+4. The kitchen has got 2 peaks slightly before 18h. The first peak could be relative to the preparation of dinner (oven and/or microwave) and the second one to the cleaning (dishwasher). This would rule out the water heating possibility late in the afternoon for dish washing. Thus,
+1.v2. The water heater & AC usage late in the evening could be simply due to heating water due to showering or the habitants could have the habit of warming up their bedrooms/house in general before going to sleep to have a confortable temperature.
+
+The reasoning behind these conclusions are nothing but speculation. However, I can relate to the data shown meaning that no nonsence has been uncovered.
+
+
+Optional Work:
+
+Below I present an equivalent to a pie plot to observe how the power consumption is distributed through the rooms in this given day:
+```{r - Donut chart for power consumption in a single day}
+
+# load library
+library(ggplot2)
+
+# Create test data.
+data <- data.frame(
+  category=c("Kitchen", "Laundry", "WaterHeater/AC"),
+  count=c(sum(houseDay10$Sub_metering_1), sum(houseDay10$Sub_metering_2), sum(houseDay10$Sub_metering_3))
+)
+ 
+# Compute percentages
+data$fraction <- data$count / sum(data$count)
+
+# Compute the cumulative percentages (top of each rectangle)
+data$ymax <- cumsum(data$fraction)
+
+# Compute the bottom of each rectangle
+data$ymin <- c(0, head(data$ymax, n=-1))
+
+# Compute label position
+data$labelPosition <- c(0,1/5,1/2)#(data$ymax + data$ymin) / 2
+
+# Compute a good label
+data$label <- paste0(data$category, " value: ", data$count, "W/h \n(",round(data$fraction,2)*100,"%)")
+
+# Make the plot
+ggplot(data, aes(ymax=ymax, ymin=ymin, xmax=4, xmin=3, fill=category)) +
+  geom_rect() +
+  geom_label( x=3.5, aes(y=labelPosition, label=label), size=6) +
+  scale_fill_brewer(palette=4) +
+  coord_polar(theta="y") +
+  xlim(c(2, 4)) +
+  theme_void() +
+  theme(legend.position = "none")
+```
+As could be understood in previous graphs, the Water heater & AC are by far the appliances that spend the most power.
+**Visualization with plotly for a Week of your choosing:**
+Use all three sub-meters and make sure to label. Experiment with granularity. 
+
+
+```{r - Subset the 2nd week (according to ISO system) of January 2008 - 60 Minute frequency}
+# Refilter the data with less granularity (only see one measurement every hour)
+houseWeek2 <- filter(df, year == 2008 & week == 2 & (minute == 0))
+houseWeek2
+```
+
+```{r - Plot sub-meter 1, 2 and 3 with title, legend and labels - 10 Minute frequency}
+plot_ly(houseWeek2, x = ~houseWeek2$DateTime, y = ~houseWeek2$Sub_metering_1, name = 'Kitchen', type = 'scatter', mode = 'lines') %>%
+ add_trace(y = ~houseWeek2$Sub_metering_2, name = 'Laundry Room', mode = 'lines') %>%
+ add_trace(y = ~houseWeek2$Sub_metering_3, name = 'Water Heater & AC', mode = 'lines') %>%
+ layout(title = "Power Consumption on the second week of 2008 (January 7th until the 13th)",
+ xaxis = list(title = "Time"),
+ yaxis = list (title = "Power (watt-hours)"))
+```
+Looking at the weekly plot, some takeaways can be taken:
+1. The only submeter that registers a somewhat constant power consumption is the water heater & AC. It seems that the inhabitants climatize their house and/or use hot water in the mornings for a long few hours (as was seen in the daily usage above) and in the evening.
+2. The laundry room has got cyclic tiny usage peaks (possibly due to the refrigerator as mentioned above) and twice a week, it has large peaks possibly due to the usage of washing machine and tumble-drier.
+3. The kitchen has got some peaks which possibly coincide with meal cooking and dish washing. Note that the kitchen peaks only happen sporadically, this could be because the inhabitants went out for a meal (or were already out).
+
+Optional Work:
+
+Below I present an equivalent to a pie plot to observe how the power consumption is distributed through the rooms in this given day:
+```{r - Donut chart for power consumption in a single day}
+
+# load library
+library(ggplot2)
+
+# Create test data.
+data <- data.frame(
+  category=c("Kitchen", "Laundry", "WaterHeater/AC"),
+  count=c(sum(houseWeek2$Sub_metering_1), sum(houseWeek2$Sub_metering_2), sum(houseWeek2$Sub_metering_3))
+)
+ 
+# Compute percentages
+data$fraction <- data$count / sum(data$count)
+
+# Compute the cumulative percentages (top of each rectangle)
+data$ymax <- cumsum(data$fraction)
+
+# Compute the bottom of each rectangle
+data$ymin <- c(0, head(data$ymax, n=-1))
+
+# Compute label position
+data$labelPosition <- c(0,1/6,1/2)#(data$ymax + data$ymin) / 2
+
+# Compute a good label
+data$label <- paste0(data$category, " value: ", data$count, "W/h \n(",round(data$fraction,2)*100,"%)")
+
+# Make the plot
+ggplot(data, aes(ymax=ymax, ymin=ymin, xmax=4, xmin=3, fill=category)) +
+  geom_rect() +
+  geom_label( x=3.5, aes(y=labelPosition, label=label), size=6) +
+  scale_fill_brewer(palette=4) +
+  coord_polar(theta="y") +
+  xlim(c(2, 4)) +
+  theme_void() +
+  theme(legend.position = "none")
+```
+
+```{r}
+data
+```
+
+
+**Create a visualization for a time period of your choice. **
+Both "Day" and "Week" highlight typical patterns in a home. 
+Another interesting visualization would be the yearly visualization to understand seasonal variations due to weather and temperature, which, in my opinion, is one factor that greatly affects power consumption in a typicall household.
+
+
+```{r - Subset the whole year of 2008 - 1 Day frequency}
+# Refilter the data with less granularity (only see one measurement every hour)
+houseYear08 <- filter(df, year == 2008 & (hour == 0 & minute == 0))
+houseYear08
+```
+
+```{r - Plot sub-meter 1, 2 and 3 with title, legend and labels - 10 Minute frequency}
+plot_ly(houseYear08, x = ~houseYear08$DateTime, y = ~houseYear08$Sub_metering_1, name = 'Kitchen', type = 'scatter', mode = 'lines') %>%
+ add_trace(y = ~houseYear08$Sub_metering_2, name = 'Laundry Room', mode = 'lines') %>%
+ add_trace(y = ~houseYear08$Sub_metering_3, name = 'Water Heater & AC', mode = 'lines') %>%
+ layout(title = "Power Consumption at midnightof everyday of 2008",
+ xaxis = list(title = "Time"),
+ yaxis = list (title = "Power (watt-hours)"))
+```
+In my opinion the graph above is worthless because it is only taking into account a given minute of all days of the year. No matter which minute I pick, hardly will it be a valid represtantion of the remaining 1439 minutes in a day for obvious reasons. Therefore, I believe that averaging out the power consumption through all minutes or adding up the values will be much more revealing.
+I will do this next:
+
+```{r - Sum power consumption of all days of 2008 - 1 day frequency}
+# Refilter the data with less granularity (only see one measurement every day)
+houseyear08_2 <- aggregate(cbind(Sub_metering_1,Sub_metering_2,Sub_metering_3)~day+month+year, FUN=sum, data=filter(df, year == 2008), na.rm=TRUE)
+houseyear08_2
+```
+
+```{r}
+houseyear08_2 <- cbind(houseyear08_2,DateTime = paste(houseyear08_2$year,houseyear08$month,houseyear08$day), stringsAsFactors=FALSE)
+houseyear08_2$DateTime <- as.POSIXct(as.Date(houseyear08_2$DateTime, "%Y %m %d"))
+houseyear08_2
+```
+
+```{r - Plot sub-meter 1, 2 and 3 with title, legend and labels - 10 Minute frequency}
+plot_ly(houseyear08_2, x = ~houseyear08_2$DateTime, y = ~houseyear08_2$Sub_metering_1, name = 'Kitchen', type = 'scatter', mode = 'lines') %>%
+ add_trace(y = ~houseyear08_2$Sub_metering_2, name = 'Laundry Room', mode = 'lines') %>%
+ add_trace(y = ~houseyear08_2$Sub_metering_3, name = 'Water Heater & AC', mode = 'lines') %>%
+ layout(title = "Total daily Power Consumption throughout the year of 2008",
+ xaxis = list(title = "Time"),
+ yaxis = list (title = "Power (watt-hours)"))
+```
+This graph seems more relevant than the one above (it is best analysed with one line at a time).
+It seems that the family left the house somewhere in late February and in the whole August, the Power consumption fell in all submeters during these intervals.
+Regarding the Laundry Room and kitchen, nothing too relevant to notice. The users have a cyclic usage of the appliances in this room.
+Regarding the Water heater & AC it seems that during the summer months (disregarding AUgust because the users were absent) the usage is lower than in other months.
+
+Optional Work:
+
+Below I present an equivalent to a pie plot to observe how the power consumption is distributed through the rooms in this given day:
+```{r - Donut chart for power consumption in a single day}
+
+# load library
+library(ggplot2)
+
+# Create test data.
+data <- data.frame(
+  category=c("Kitchen", "Laundry", "WaterHeater/AC"),
+  count=c(sum(houseyear08_2$Sub_metering_1), sum(houseyear08_2$Sub_metering_2), sum(houseyear08_2$Sub_metering_3))
+)
+ 
+# Compute percentages
+data$fraction <- data$count / sum(data$count)
+
+# Compute the cumulative percentages (top of each rectangle)
+data$ymax <- cumsum(data$fraction)
+
+# Compute the bottom of each rectangle
+data$ymin <- c(0, head(data$ymax, n=-1))
+
+# Compute label position
+data$labelPosition <- c(0,1/6,1/2)#(data$ymax + data$ymin) / 2
+
+# Compute a good label
+data$label <- paste0(data$category, " value: ", data$count, "W/h \n(",round(data$fraction,2)*100,"%)")
+
+# Make the plot
+ggplot(data, aes(ymax=ymax, ymin=ymin, xmax=4, xmin=3, fill=category)) +
+  geom_rect() +
+  geom_label( x=3.5, aes(y=labelPosition, label=label), size=6) +
+  scale_fill_brewer(palette=4) +
+  coord_polar(theta="y") +
+  xlim(c(2, 4)) +
+  theme_void() +
+  theme(legend.position = "none")
+```
+The conclusions taken on the above donut plot are similar to the ones above. The Water Heater & AC consume the most power out of all appliances in the house.
+
+
+*2. Prepare to analyze the data*
+
+**Re-read the data**
+```{r - Read the dataset from memory}
+df<-read.csv('household_power_consumption.csv')
+df
+```
+
+```{r - Prepare Date Time column and create additional time period separators for task 2}
+df <- cbind(df,DateTime = paste(df$Date,df$Time), stringsAsFactors=FALSE)
+df <- df %>%
+  select(X, DateTime, Sub_metering_1, Sub_metering_2, Sub_metering_3)
+df$DateTime <- as.POSIXct(df$DateTime, "%Y/%m/%d %H:%M:%S")
+
+df$quarter <- quarter(df$DateTime)
+df$month <- month(df$DateTime)
+df$week <- isoweek(df$DateTime)
+#In order to show week days in English instead of Portuguese (my original locale in RStudio) I will run the following command:
+Sys.setlocale("LC_TIME", "English")
+df$weekdays <- weekdays(df$DateTime)
+df$day <- day(df$DateTime)
+df$hour <- hour(df$DateTime)
+df$minute <- minute(df$DateTime)
+
+attr(df$DateTime, "tzone") <- "Europe/Paris"
+
+df
+```
+
+**Create time series and plot submeter3**
+```{r - Subset to one observation per week on Mondays at 8:00pm for 2007, 2008 and 2009 and create timeseries}
+house070809weekly <- filter(df, weekdays == 'Monday' & hour == 20 & minute == 1)
+tsSM3_070809weekly <- ts(house070809weekly$Sub_metering_3, frequency=52, start=c(2007,1))
+```
+
+```{r - Plot sub-meter 3 with autoplot - add labels, color}
+autoplot(tsSM3_070809weekly, ts.colour = 'red', xlab = "Time", ylab = "Watt Hours", main = "Sub-meter 3 / Water Heater & AC")
+```
+```{r - Plot sub-meter 3 with plot.ts}
+plot.ts(tsSM3_070809weekly)
+```
+**Create time series and plot submeter2**
+```{r - Subset to one observation per day at 3:00pm for 2007, 2008 and 2009 and create timeseries}
+house070809daily <- filter(df, hour == 15 & minute == 1)
+tsSM2_070809daily <- ts(house070809daily$Sub_metering_2, frequency=365, start=c(2007,1))
+```
+
+```{r - Plot sub-meter 2 with autoplot - add labels, color}
+autoplot(tsSM2_070809daily, ts.colour = 'red', xlab = "Time", ylab = "Watt Hours", main = "Sub-meter 2 / Laundry")
+```
+```{r - Plot sub-meter 2 with plot.ts}
+plot.ts(tsSM2_070809daily)
+```
+
+**Create time series and plot submeter1**
+```{r - Subset to one observation per week day at 12:00pm for 2007, 2008 and 2009 and create timeseries}
+house070809daily <- filter(df, hour == 12 & minute == 1)
+tsSM1_070809daily <- ts(house070809daily$Sub_metering_1, frequency=365, start=c(2007,1))
+```
+
+```{r - Plot sub-meter 1 with autoplot - add labels, color}
+autoplot(tsSM1_070809daily, ts.colour = 'red', xlab = "Time", ylab = "Watt Hours", main = "Sub-meter 1 / Kitchen")
+```
+```{r - Plot sub-meter 1 with plot.ts}
+plot.ts(tsSM1_070809daily)
+```
+
+
+*Forecasting time series*
+
+**Forecasting sub-meter 3:**
+```{r - Apply time series linear regression to the sub-meter 3 ts object and use summary to obtain R2 and RMSE from the model you built}
+fitSM3 <- tslm(tsSM3_070809weekly ~ trend + season) 
+summary(fitSM3)
+```
+P-value is basically 5% which can be considered statistically significant, therefore this model is valid.
+```{r - Create and plot the forecast for sub-meter 3. Forecast ahead 20 time periods }
+forecastfitSM3 <- forecast(fitSM3, h=20)
+plot(forecastfitSM3)
+```
+Linear regression does not respect the bounds of 0. It's linear, always and everywhere. It may not be appropriate for values that need to be close to 0 but are strictly positive.
+
+Therefore, I will now limit the lower bound to zero and increase confidence levels:
+```{r - Create and plot sub-meter 3 forecast with confidence levels 80 and 90}
+forecastfitSM3c <- forecast(fitSM3, h=20, level=c(80,90))
+
+plot(forecastfitSM3c, ylim = c(0, 20), ylab= "Watt-Hours", xlab="Time")
+```
+
+
+**Forecasting sub-meter 2:**
+```{r - Apply time series linear regression to the sub-meter 3 ts object and use summary to obtain R2 and RMSE from the model you built}
+fitSM2 <- tslm(tsSM2_070809daily ~ trend + season) 
+summary(fitSM2)
+```
+
+```{r - Create and plot the forecast for sub-meter 2. Forecast ahead 50 time periods }
+forecastfitSM2 <- forecast(fitSM2, h=50)
+plot(forecastfitSM2)
+```
+Linear regression does not respect the bounds of 0. It's linear, always and everywhere. It may not be appropriate for values that need to be close to 0 but are strictly positive.
+
+Therefore, I will now limit the lower bound to zero and increase confidence levels:
+```{r - Create and plot sub-meter 2 forecast with confidence levels 80 and 90}
+forecastfitSM2c <- forecast(fitSM2, h=50, level=c(80,90))
+
+plot(forecastfitSM2c, ylim = c(0, 20), ylab= "Watt-Hours", xlab="Time")
+```
+As we increase the confidence level, say from 95% to 99%, our range becomes wider.
+Therefore I decided to keep the confidence level at the recommended levels (between 80% and 90%).
+
+
+**Forecasting sub-meter 1:**
+```{r - Apply time series linear regression to the sub-meter 1 ts object and use summary to obtain R2 and RMSE from the model you built}
+fitSM1 <- tslm(tsSM1_070809daily ~ trend + season) 
+summary(fitSM1)
+```
+
+```{r - Create and plot the forecast for sub-meter 1. Forecast ahead 50 time periods }
+forecastfitSM1 <- forecast(fitSM1, h=50)
+plot(forecastfitSM1)
+```
+Linear regression does not respect the bounds of 0. It's linear, always and everywhere. It may not be appropriate for values that need to be close to 0 but are strictly positive.
+
+Therefore, I will now limit the lower bound to zero and increase confidence levels:
+```{r - Create and plot sub-meter 1 forecast with confidence levels 80 and 90}
+forecastfitSM1c <- forecast(fitSM1, h=50, level=c(80,90))
+
+plot(forecastfitSM1c, ylim = c(0, 20), ylab= "Watt-Hours", xlab="Time")
+```
+
+**Comparison chart showing the R2 and RMSE of each model I built:**
+
+
+```{r - Prepare dataframe and plot chart of RMSE and Rsquared of previous models}
+
+Results_Models <- data.frame(
+  category=c("Sub-meter1 / Kitchen", "Sub-meter2 / Laundry", "Sub-meter 3 / WaterHeater/AC"),
+  RMSE = c(sqrt(mean(fitSM1$residuals^2)), sqrt(mean(fitSM2$residuals^2)), sqrt(mean(fitSM3$residuals^2))),
+  RSquared=c(summary(fitSM1)$r.squared, summary(fitSM2)$r.squared, summary(fitSM3)$r.squared)
+)
+Results_Models
+
+# Horizontal version
+ggplot(data, aes(x=x, y=y)) +
+  geom_segment( aes(x=x, xend=x, y=0, yend=y), color="skyblue") +
+  geom_point( color="blue", size=4, alpha=0.6) +
+  theme_light() +
+  coord_flip() +
+  theme(
+    panel.grid.major.y = element_blank(),
+    panel.border = element_blank(),
+    axis.ticks.y = element_blank()
+  )
+```
+
+*Decomposing a Seasonal Time Series*
+
+```{r - Decompose Sub-meter 3 into trend, seasonal and remainder}
+components070809SM3weekly <- decompose(tsSM3_070809weekly)
+## Plot decomposed sub-meter 3 
+plot(components070809SM3weekly)
+## Check summary statistics for decomposed sub-meter 3 
+summary(components070809SM3weekly)
+```
+
+```{r - Decompose Sub-meter 2 into trend, seasonal and remainder}
+components070809SM2daily <- decompose(tsSM2_070809daily)
+## Plot decomposed sub-meter 2
+plot(components070809SM2daily)
+## Check summary statistics for decomposed sub-meter 2
+summary(components070809SM2daily)
+```
+
+
+
+```{r - Decompose Sub-meter 1 into trend, seasonal and remainder}
+components070809SM1daily <- decompose(tsSM1_070809daily)
+## Plot decomposed sub-meter 1
+plot(components070809SM1daily)
+## Check summary statistics for decomposed sub-meter 1
+summary(components070809SM1daily)
+```
+
+**Trend comparison**
+```{r - Decompose Sub-meter 2 into trend, seasonal and remainder}
+
+par(mfrow=c(3,1))
+plot(components070809SM1daily$trend, type ='l',col="red")
+plot(components070809SM2daily$trend, type ='l',col="green")
+plot(components070809SM3weekly$trend, type ='l',col="blue")
+
+
+```
+
+*Holt-Winters Forecasting*
+
+To use HoltWinters() and forecasting you will first need to remove the seasonal component that you identified via decomposition. You can use seasonal adjusting for this as seen in the Little Book of R for Time Series.
+
+**Remove Seasonal Components**
+Sub-meter 3:
+```{r - Seasonal adjusting sub-meter 3 by subtracting the seasonal component & plot}
+tsSM3_070809Adjusted <- tsSM3_070809weekly - components070809SM3weekly$seasonal
+autoplot(tsSM3_070809Adjusted)
+```
+```{r - Test Seasonal Adjustment by running Decompose again. Note the very, very small scale for Seasonal}
+plot(decompose(tsSM3_070809Adjusted))
+```
+
+We have a seasonal line, but looing  at the scale for the seasonal section: -1e-15 through 5e-16, we see that it is irrelevant.
+
+Sub-meter 2:
+```{r - Seasonal adjusting sub-meter 2 by subtracting the seasonal component & plot}
+tsSM2_070809Adjusted <- tsSM2_070809daily - components070809SM2daily$seasonal
+autoplot(tsSM2_070809Adjusted)
+```
+```{r - Test Seasonal Adjustment by running Decompose again. Note the very, very small scale for Seasonal}
+plot(decompose(tsSM2_070809Adjusted))
+```
+Sub-meter 1:
+```{r - Seasonal adjusting sub-meter 1 by subtracting the seasonal component & plot}
+tsSM1_070809Adjusted <- tsSM1_070809daily - components070809SM1daily$seasonal
+autoplot(tsSM1_070809Adjusted)
+```
+```{r - Test Seasonal Adjustment by running Decompose again. Note the very, very small scale for Seasonal}
+plot(decompose(tsSM1_070809Adjusted))
+```
+
+
+**HoltWinters Simple Exponential Smoothing:**
+
+If you have a time series that can be described using an additive model with increasing or decreasing trend and no seasonality, you can use Holt’s exponential smoothing to make short-term forecasts. Holt’s exponential smoothing estimates the level and slope at the current time point.
+
+Smoothing is controlled by two parameters, alpha, for the estimate of the level at the current time point, and beta for the estimate of the slope b of the trend component at the current time point. As with simple exponential smoothing, the paramters alpha and beta have values between 0 and 1, and values that are close to 0 mean that little weight is placed on the most recent observations when making forecasts of future values.
+
+Sub-meter 3:
+```{r - Holt Winters Exponential Smoothing & Plot}
+tsSM3_HW070809 <- HoltWinters(tsSM3_070809Adjusted, beta=FALSE, gamma=FALSE)
+plot(tsSM3_HW070809, ylim = c(0, 25))
+```
+
+Sub-meter 2:
+```{r - Holt Winters Exponential Smoothing & Plot}
+tsSM2_HW070809 <- HoltWinters(tsSM2_070809Adjusted, beta=FALSE, gamma=FALSE)
+plot(tsSM2_HW070809, ylim = c(0, 30))
+```
+Sub-meter 1:
+```{r - Holt Winters Exponential Smoothing & Plot}
+tsSM1_HW070809 <- HoltWinters(tsSM1_070809Adjusted, beta=FALSE, gamma=FALSE)
+plot(tsSM1_HW070809, ylim = c(0, 25))
+```
+
+**HoltWinters Forecast:**
+Sub-meter 3:
+```{r - HoltWinters forecast & plot}
+tsSM3_HW070809for <- forecast(tsSM3_HW070809, h=25)
+plot(tsSM3_HW070809for, ylim = c(0, 20), ylab= "Watt-Hours", xlab="Time - Sub-meter 3")
+```
+
+```{r - Forecast HoltWinters with diminished confidence levels and plot forecasted area}
+tsSM3_HW070809forC <- forecast(tsSM3_HW070809, h=25, level=c(10,25))
+plot(tsSM3_HW070809forC, ylim = c(0, 20), ylab= "Watt-Hours", xlab="Time - Sub-meter 3", start(2010))
+```
+
+
+Sub-meter 2:
+```{r - HoltWinters forecast & plot}
+tsSM2_HW070809for <- forecast(tsSM2_HW070809, h=25)
+plot(tsSM2_HW070809for, ylim = c(0, 20), ylab= "Watt-Hours", xlab="Time - Sub-meter 2")
+```
+
+```{r - Forecast HoltWinters with diminished confidence levels and plot forecasted area}
+tsSM2_HW070809forC <- forecast(tsSM2_HW070809, h=25, level=c(10,25))
+plot(tsSM2_HW070809forC, ylim = c(0, 20), ylab= "Watt-Hours", xlab="Time - Sub-meter 2", start(2010))
+```
+
+
+Sub-meter 1:
+```{r - HoltWinters forecast & plot}
+tsSM1_HW070809for <- forecast(tsSM1_HW070809, h=25)
+plot(tsSM1_HW070809for, ylim = c(0, 20), ylab= "Watt-Hours", xlab="Time - Sub-meter 1")
+```
+
+```{r - Forecast HoltWinters with diminished confidence levels and plot forecasted area}
+tsSM1_HW070809forC <- forecast(tsSM1_HW070809, h=25, level=c(10,25))
+plot(tsSM1_HW070809forC, ylim = c(0, 20), ylab= "Watt-Hours", xlab="Time - Sub-meter 1", start(2010))
+```
