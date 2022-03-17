@@ -171,6 +171,8 @@ Having these 3 parameters it will hopefully be easy to infer SpaceID through a l
 First of all let's define the usable features and the target for this model:
 ```{r}
 df_train_RP <- df_train %>% select(starts_with("WAP"),"RELATIVEPOSITION")
+#Perform factorization on target column:
+df_train_RP$RELATIVEPOSITION <- as.factor(df_train_RP$RELATIVEPOSITION) #Reconvert brand into binary column not integer.
 ```
 
 
@@ -195,9 +197,9 @@ Because this dataset is slightly unbalanced, I will attempt to train according t
 # tuneLenght = 1 (trains with 1 mtry value for RandomForest)
 svmfitControl <- train(RELATIVEPOSITION~., #y/target
                  data = df_train_RP, #X/features
-                 metric = 'Kappa', #Metric applied
-                 method = "gbm", #ML algorithm
-                 trControl=gbmfitControl, #Apply CV to the training
+                 
+                 method = "svmLinear", #ML algorithm
+                 trControl=svmfitControl, #Apply CV to the training
                  tuneLength = 10, # Number of levels for each tuning parameters that should be generated
                  verbose = FALSE)
 
