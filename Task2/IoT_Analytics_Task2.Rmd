@@ -455,7 +455,7 @@ houseyear08_2
 ```
 
 ```{r}
-houseyear08_2 <- cbind(houseyear08_2,DateTime = paste(houseyear08_2$year,houseyear08$month,houseyear08$day), stringsAsFactors=FALSE)
+houseyear08_2 <- cbind(houseyear08_2,DateTime = paste(houseyear08_2$year,houseyear08_2$month,houseyear08_2$day), stringsAsFactors=FALSE)
 houseyear08_2$DateTime <- as.POSIXct(as.Date(houseyear08_2$DateTime, "%Y %m %d"))
 houseyear08_2
 ```
@@ -652,15 +652,19 @@ plot(forecastfitSM1c, ylim = c(0, 20), ylab= "Watt-Hours", xlab="Time")
 ```{r - Prepare dataframe and plot chart of RMSE and Rsquared of previous models}
 
 Results_Models <- data.frame(
-  category=c("Sub-meter1 / Kitchen", "Sub-meter2 / Laundry", "Sub-meter 3 / WaterHeater/AC"),
+  category=c("Sub-meter1 / Kitchen", "Sub-meter2 / Laundry", "Sub-meter3 / WaterHeater & AC"),
   RMSE = c(sqrt(mean(fitSM1$residuals^2)), sqrt(mean(fitSM2$residuals^2)), sqrt(mean(fitSM3$residuals^2))),
   RSquared=c(summary(fitSM1)$r.squared, summary(fitSM2)$r.squared, summary(fitSM3)$r.squared)
 )
 Results_Models
 
+
+```
+
+```{r}
 # Horizontal version
-ggplot(data, aes(x=x, y=y)) +
-  geom_segment( aes(x=x, xend=x, y=0, yend=y), color="skyblue") +
+ggplot(Results_Models, aes(x=category, y=RMSE)) +
+  geom_segment( aes(x=category, xend=category, y=4, yend=RMSE), color="skyblue") +
   geom_point( color="blue", size=4, alpha=0.6) +
   theme_light() +
   coord_flip() +
@@ -669,7 +673,20 @@ ggplot(data, aes(x=x, y=y)) +
     panel.border = element_blank(),
     axis.ticks.y = element_blank()
   )
+ggplot(Results_Models, aes(x=category, y=RSquared)) +
+  geom_segment( aes(x=category, xend=category, y=0, yend=RSquared), color="skyblue") +
+  geom_point( color="blue", size=4, alpha=0.6) +
+  theme_light() +
+  coord_flip() +
+  theme(
+    panel.grid.major.y = element_blank(),
+    panel.border = element_blank(),
+    axis.ticks.y = element_blank()
+  )
+
+
 ```
+
 
 *Decomposing a Seasonal Time Series*
 
@@ -782,23 +799,23 @@ plot(tsSM3_HW070809forC, ylim = c(0, 20), ylab= "Watt-Hours", xlab="Time - Sub-m
 
 Sub-meter 2:
 ```{r - HoltWinters forecast & plot}
-tsSM2_HW070809for <- forecast(tsSM2_HW070809, h=25)
+tsSM2_HW070809for <- forecast(tsSM2_HW070809, h=50)
 plot(tsSM2_HW070809for, ylim = c(0, 20), ylab= "Watt-Hours", xlab="Time - Sub-meter 2")
 ```
 
 ```{r - Forecast HoltWinters with diminished confidence levels and plot forecasted area}
-tsSM2_HW070809forC <- forecast(tsSM2_HW070809, h=25, level=c(10,25))
+tsSM2_HW070809forC <- forecast(tsSM2_HW070809, h=50, level=c(10,25))
 plot(tsSM2_HW070809forC, ylim = c(0, 20), ylab= "Watt-Hours", xlab="Time - Sub-meter 2", start(2010))
 ```
 
 
 Sub-meter 1:
 ```{r - HoltWinters forecast & plot}
-tsSM1_HW070809for <- forecast(tsSM1_HW070809, h=25)
+tsSM1_HW070809for <- forecast(tsSM1_HW070809, h=50)
 plot(tsSM1_HW070809for, ylim = c(0, 20), ylab= "Watt-Hours", xlab="Time - Sub-meter 1")
 ```
 
 ```{r - Forecast HoltWinters with diminished confidence levels and plot forecasted area}
-tsSM1_HW070809forC <- forecast(tsSM1_HW070809, h=25, level=c(10,25))
+tsSM1_HW070809forC <- forecast(tsSM1_HW070809, h=50, level=c(10,25))
 plot(tsSM1_HW070809forC, ylim = c(0, 20), ylab= "Watt-Hours", xlab="Time - Sub-meter 1", start(2010))
 ```
