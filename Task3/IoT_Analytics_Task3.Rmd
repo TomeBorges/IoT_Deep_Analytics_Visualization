@@ -10,6 +10,12 @@ library(RMySQL)
 
 library(caret)
 
+
+library(klaR)
+#Avoid loading the MASS package after dplyr
+#It may cause a mess with the select function
+
+library(dplyr)
 library(tidyverse)
 library(readxl)
 library(knitr)
@@ -102,7 +108,7 @@ As expected most entries are a null reading (represented as a '100').
 Let's filter out these entries to get a better reading:
 
 ```{r -  Plot WAP variables in a single graph without null readings}
-hist((stack(df_train %>% select(starts_with("WAP"))) %>% filter(values <100))$values,xlab="WAP power",main="Distribution of WAP intensity")
+hist((stack(df_train %>% select(starts_with("WAP"))) %>% filter(values <100))$values,xlab="WAP power",main="Distribution of WAP intensity excluding null readings")
 ```
 As expected we now have a good looking normal distribution. It is slightly skewed to the right.
 
@@ -120,13 +126,13 @@ hist(df_train$PHONEID,xlab="Phone ID",main="Distribution of Phone IDs")
 ```
 
 
-Let's confirm that the distributions are similar to the validation dataset:
+Let's confirm that the distributions are similar in the validation dataset:
 
-```{r -  Plot WAP variables in a single graph without null readings}
-hist((stack(df_validation %>% select(starts_with("WAP"))) %>% filter(values <100))$values,xlab="WAP power",main="Distribution of WAP intensity")
+```{r -  Plot WAP variables in a single graph without null readings - Validation}
+hist((stack(df_validation %>% select(starts_with("WAP"))) %>% filter(values <100))$values,xlab="WAP power",main="Distribution of WAP intensity excluding null readings")
 ```
 
-```{r - Plot of the not related to Wireless Access Points power}
+```{r - Plot of the not related to Wireless Access Points power - Validation}
 hist(df_validation$LONGITUDE,xlab="Longitude",main="Distribution of Longitudes")
 hist(df_validation$LATITUDE,xlab="Latitude",main="Distribution of Latitude")
 hist(df_validation$FLOOR,xlab="Floor",main="Distribution of Floors")
@@ -138,7 +144,9 @@ hist(df_validation$USERID,xlab="User ID",main="Distribution of UserIDs")
 hist(df_validation$PHONEID,xlab="Phone ID",main="Distribution of Phone IDs")
 ```
 
-The distributions are quite similar, the exceptions are in the SPACEID, RELATIVEPOSITION and USERID where the validation dataset has no variation. We will confirm this below:
+
+
+The distributions are quite similar, the exceptions are in the SPACEID, RELATIVEPOSITION and USERID where the validation dataset is constant throughout. We will confirm this below:
 
 ```{r - Non-variant columns in validation df}
 table(df_validation$SPACEID)
@@ -147,12 +155,32 @@ table(df_validation$USERID)
 ```
 Ye, as expected all are null.
 
+
+
+
 *2nd round of Preprocessing the data:*
+
+**Remove variables without any variation**
+I noticed that many variables haven't got any variation. It is useless to incorporate these features in any model as they won't add any new information. 
+Therefore, I will identify and later remove these variables.
+
+```{r - Identify and remove constant variables}
+constant_variables <- names(df_train[, sapply(df_train, function(v) var(v, na.rm=TRUE)==0)])
+df_train <- df_train[,sapply(df_train, function(v) var(v, na.rm=TRUE)!=0)]
+constant_variables
+```
+
 **Sampling**
 As mentioned in the Plan of attack, the dataset is too large. Therefore, I will utilize a random subset of the data for the machine learning portion of this project.
 ```{r - Gather random sample of 2500 entries from train dataset:}
 set.seed(42) #Set seed to ensure reproducibility
-df_train[sample(nrow(df_train), 2500),]
+df_sample_train <- df_train[sample(nrow(df_train), 2500),]
+```
+
+```{r - Identify and remove constant variables in sample dataset}
+constant_variables <- names(df_sample_train[, sapply(df_sample_train, function(v) var(v, na.rm=TRUE)==0)])
+df_sample_train <- df_sample_train[,sapply(df_sample_train, function(v) var(v, na.rm=TRUE)!=0)]
+constant_variables
 ```
 
 *ML Modeling*
@@ -161,30 +189,44 @@ Felice recomended to forecast in cascade, firstly classify the easiest parameter
 
 Let's do that.
 
+
 The easiest parameter seems to be the relative position (in or out), then the Building ID and finally the floor.
 Having these 3 parameters it will hopefully be easy to infer SpaceID through a last classification model.
 
+Experimentally, I found out that the buildingID is the easiest feature to forecast. This seems plausible because this ought to be the feature with less overlap of WAP signaling: a change in the building value imposes the largest physical distance movimentation relatively to a floor or going outside. In other words, a given WAP can send signal to multiple floors or both inside and outside, but due to increased distance, it seems unlikely that it is capable of sending signals to multiple buildings. Additionaly, knowing the building is helpful when forecasting other variables as can be seen here:
 
+```{r - Plot buildingID against floor and relativeposition.}
+Building_Floor_graph<-ggplot(data=df_train, aes(x=BUILDINGID, fill = factor(FLOOR))) + geom_bar()
+Building_Floor_graph
 
-**Relative Position**
+Building_InsOut_graph<-ggplot(data=df_train, aes(x=BUILDINGID, fill = factor(RELATIVEPOSITION))) + geom_bar()
+Building_InsOut_graph
 
-First of all let's define the usable features and the target for this model:
-```{r}
-df_train_RP <- df_train %>% select(starts_with("WAP"),"RELATIVEPOSITION")
-#Perform factorization on target column:
-df_train_RP$RELATIVEPOSITION <- as.factor(df_train_RP$RELATIVEPOSITION) #Reconvert brand into binary column not integer.
 ```
 
 
-I chose the following models because these are the ones I am most familiarized and from what I understood, provide good results right out of the bat.
+**Define Models**
+
+I chose the following models because these are the ones I am most familiarized and from what I understood, provide good results right out of the bat:
+Logistic Regression Boosting;
+Gradient Boosting;
+Random Forest;
 ```{r - 10 fold cross validation for 3 models to experiment}
-svmfitControl <- trainControl(method = "repeatedcv", 
-                              number = 10, # number of folds
+lbfitControl <- trainControl(method = "repeatedcv", 
+                              number = 3, # number of folds
                               repeats = 1) #the number of complete sets of folds to compute
-gbmfitControl <- trainControl(method = "repeatedcv", number = 10, repeats = 1)
-rffitControl <- trainControl(method = "repeatedcv", number = 10, repeats = 1)
+gbmfitControl <- trainControl(method = "repeatedcv", number = 3, repeats = 1)
+rffitControl <- trainControl(method = "repeatedcv", number = 3, repeats = 1)
+```
 
 
+**Building ID**
+
+First of all let's define the usable features and the target for this model:
+```{r}
+df_train_BID <- df_sample_train %>% select(starts_with("WAP"),"BUILDINGID")
+#Perform factorization on target column:
+df_train_BID$BUILDINGID <- as.factor(as.character(df_train_BID$BUILDINGID)) #Reconvert brand into binary column not integer.
 ```
 
 Because this dataset is slightly unbalanced, I will attempt to train according to the kappa metric instead of accuracy.
@@ -192,41 +234,301 @@ Because this dataset is slightly unbalanced, I will attempt to train according t
 
 
 
+Let's train each of the 3 models with the training dataset:
 
-```{r - Train Gradient Boost Classification model}
-# tuneLenght = 1 (trains with 1 mtry value for RandomForest)
-svmfitControl <- train(RELATIVEPOSITION~., #y/target
-                 data = df_train_RP, #X/features
-                 
-                 method = "svmLinear", #ML algorithm
-                 trControl=svmfitControl, #Apply CV to the training
-                 tuneLength = 10, # Number of levels for each tuning parameters that should be generated
+```{r - Train Naive Bayes Classification model}
+lbfit_BID <- train(BUILDINGID~., #y/target
+                 data = df_train_BID, #X/features
+                 method = "LogitBoost", #ML algorithm
+                 trControl=lbfitControl, #Apply CV to the training
+                 tuneLength = 2, # Number of levels for each tuning parameters that should be generated.
+                )
+
+lbfit_BID
+```
+
+```{r - Train Gradient Boost Machine Classification model}
+gbmfit_BID <- train(BUILDINGID~., #y/target
+                 data = df_train_BID, #X/features
+                 metric = 'Kappa', #Metric applied
+                 method = "gbm", #ML algorithm
+                 trControl=gbmfitControl, #Apply CV to the training
+                 tuneLength = 2, # Number of levels for each tuning parameters that should be generated
                  verbose = FALSE)
 
-gbmFit1
+gbmfit_BID
+```
+
+```{r - Train Random Forest Classification model}
+rffit_BID <- train(BUILDINGID~., #y/target
+                 data = df_train_BID, #X/features
+                 metric = 'Kappa', #Metric applied
+                 method = "rf", #ML algorithm
+                 trControl=rffitControl, #Apply CV to the training
+                 tuneLength = 2, # Number of levels for each tuning parameters that should be generated
+                 verbose = FALSE)
+
+
+
+rffit_BID
+```
+
+As asked, in this part we are supposed to train 3 models, which is what is coded above.
+
+Train function automatically picks the iteration with the largest performance value (the one with best Kappa in this case), therefore there is no need to select the best iteration of the models.
+
+```{r -  Ascertain how the model prioritized each feature in each model training}
+varImp(lbfit_BID)
+
+varImp(gbmfit_BID)
+
+varImp(rffit_BID)
+```
+
+
+
+
+As predicted the salary variable is the most relevant in predicting the target variable. Age comes in a close second place. The remaining variables have a really low relative impact when forecasting the target.
+
+```{r - Make predictions based on GBM trained model and calculate basic metrics (with PostResample)}
+BID_pred_LB <- predict(lbfit_BID, newdata = df_train)
+confusionMatrix(data = pred_GBM, 
+                reference = factor(df_train$BUILDINGID))
+
+BID_pred_GBM <- predict(gbmfit_BID, newdata = df_train)
+confusionMatrix(data = pred_GBM, 
+                reference = factor(df_train$BUILDINGID))
+BID_pred_RF <- predict(rffit_BID, newdata = df_train)
+confusionMatrix(data = pred_GBM, 
+                reference = factor(df_train$BUILDINGID))
+```
+
+
+This model provides an accuracy of ~94% which is pretty high.
+The Kappa or Cohen's Kappa is at ~86% which is quite impressive since this metric is normalized at the baseline of random chance on our dataset.
+This dataset has a slightly unbalanced target, therefore the Kappa value is quite different from the accuracy value.
+It's worth adding that if the model was trained to optimise the accuracy, the metrics accuracy and Kappa obtained would be respectively: 0.932498 0.856289. Therefore optimising this model to the metric "Kappa" is a much better alternative for this dataset as it provided better results in both metrics!
+
+
+```{r - Further metrics with confusion matrix}
+confusionMatrix(data = pred_GBM, 
+                reference = testing$brand, 
+                positive = "1")
+```
+
+
+Compare the results from the three models:
+```{r - Compare results}
+results <- resamples(list(GBMAut=gbmFit1, RFMan=rfFit1))
+
+summary(results)
+
+bwplot(results)
+```
+
+
+
+**Relative Position**
+
+First of all let's define the usable features and the target for this model:
+```{r}
+df_train_RP <- df_sample_train %>% select(starts_with("WAP"),"RELATIVEPOSITION")
+#Perform factorization on target column:
+df_train_RP$RELATIVEPOSITION <- as.factor(as.character(df_train_RP$RELATIVEPOSITION)) #Reconvert brand into binary column not integer.
+```
+
+Because this dataset is slightly unbalanced, I will attempt to train according to the kappa metric instead of accuracy.
+(Practically, Cohen’s kappa removes the possibility of the classifier and a random guess agreeing and measures the number of predictions it makes that cannot be explained by a random guess. Furthermore, Cohen’s kappa tries to correct the evaluation bias by taking into account the correct classification by a random guess.)
+
+
+
+Let's train each of the 3 models with the training dataset:
+
+```{r - Train Naive Bayes Classification model}
+nbfit_RP <- train(RELATIVEPOSITION~., #y/target
+                 data = df_train_RP, #X/features
+                 method = "nb", #ML algorithm
+                 trControl=nbfitControl, #Apply CV to the training
+                 tuneLength = 2, # Number of levels for each tuning parameters that should be generated.
+                )
+
+nbfit_RP
+```
+
+```{r - Train Gradient Boost Machine Classification model}
+gbmfit_RP <- train(RELATIVEPOSITION~., #y/target
+                 data = df_train_RP, #X/features
+                 metric = 'Kappa', #Metric applied
+                 method = "gbm", #ML algorithm
+                 trControl=gbmfitControl, #Apply CV to the training
+                 tuneLength = 2, # Number of levels for each tuning parameters that should be generated
+                 verbose = FALSE)
+
+gbmfit_RP
+```
+
+```{r - Train Random Forest Classification model}
+rffit_RP <- train(RELATIVEPOSITION~., #y/target
+                 data = df_train_RP, #X/features
+                 metric = 'Kappa', #Metric applied
+                 method = "rf", #ML algorithm
+                 trControl=rffitControl, #Apply CV to the training
+                 tuneLength = 2, # Number of levels for each tuning parameters that should be generated
+                 verbose = FALSE)
+
+
+
+rffit_RP
 ```
 
 As asked, in this part we are supposed to train a model using Stochastic Gradient Boosting, GBM, on the training set with 10-fold cross-validation and an Automatic Tuning Grid, which is what is coded above.
 
 Train function chooses the model with the largest performance value (or smallest, for mean squared error in regression models), therefore there is no need to select the best iteration of the models.
 
-```{r -  Ascertain how the model prioritized each feature in the GBM training}
-varImp(gbmFit1)
+```{r -  Ascertain how the model prioritized each feature in each model training}
+varImp(nbfit_RP)
+
+varImp(gbmfit_RP)
+
+varImp(rffit_RP)
+```
+
+
+Note, the validation_df has a meaningless value for RELATIVEPOSITON, therefore I will calculate the confusion matrix for the training dataset:
+```{r - Make predictions based on GBM trained model and calculate confusion matrix}
+pred_GBM_RP <- predict(gbmfit_RP, newdata = df_train_RP)
+
+confusionMatrix(data = pred_GBM_RP, 
+                reference = df_train_RP$RELATIVEPOSITION, 
+                positive = "1")
+```
+
+This model provides an accuracy of ~94% which is pretty high.
+The Kappa or Cohen's Kappa is at ~86% which is quite impressive since this metric is normalized at the baseline of random chance on our dataset.
+This dataset has a slightly unbalanced target, therefore the Kappa value is quite different from the accuracy value.
+It's worth adding that if the model was trained to optimise the accuracy, the metrics accuracy and Kappa obtained would be respectively: 0.932498 0.856289. Therefore optimising this model to the metric "Kappa" is a much better alternative for this dataset as it provided better results in both metrics!
+
+
+```{r - Further metrics with confusion matrix}
+confusionMatrix(data = pred_GBM, 
+                reference = testing$brand, 
+                positive = "1")
+```
+
+
+```{r - Calculate two class summary for binary GBM model}
+temp_pred_GB = factor(ifelse(pred_GBM == 1, "Y", "N"))
+temp_obs_GB = factor(ifelse(testing$brand == 1, "Y", "N"))
+
+twoClassSummary(data = data.frame(obs = temp_obs_GB, pred = temp_pred_GB, Y = Prob_pred_GBM$'1', N = Prob_pred_GBM$'0'), lev = levels(temp_pred_GB))
+#For some reason, this function does not seem to provide ROC results if a binary numerical labeling is used, I had to convert '1' into 'Y' and '0' into 'N' to obtain valid results
+
+mnLogLoss(data = data.frame(obs = temp_obs_GB, pred = temp_pred_GB, Y = Prob_pred_GBM$'1', N = Prob_pred_GBM$'0'), lev = levels(temp_pred_GB))
+```
+
+
+
+*Compare the results from two models:*
+```{r - Compare results}
+results <- resamples(list(GBMAut=gbmFit1, RFMan=rfFit1))
+
+summary(results)
+
+bwplot(results)
 ```
 
 
 
 
+**Floor**
+
+First of all let's define the usable features and the target for this model:
+```{r}
+df_train_F <- df_sample_train %>% select(starts_with("WAP"),"FLOOR")
+#Perform factorization on target column:
+df_train_F$FLOOR <- as.factor(as.character(df_train_F$FLOOR)) #Reconvert brand into binary column not integer.
+```
+
+Because this dataset is slightly unbalanced, I will attempt to train according to the kappa metric instead of accuracy.
+(Practically, Cohen’s kappa removes the possibility of the classifier and a random guess agreeing and measures the number of predictions it makes that cannot be explained by a random guess. Furthermore, Cohen’s kappa tries to correct the evaluation bias by taking into account the correct classification by a random guess.)
+
+
+
+Let's train each of the 3 models with the training dataset:
+
+```{r - Train Naive Bayes Classification model}
+nbfit_F <- train(FLOOR~., #y/target
+                 data = df_train_F, #X/features
+                 method = "nb", #ML algorithm
+                 trControl=nbfitControl, #Apply CV to the training
+                 tuneLength = 2, # Number of levels for each tuning parameters that should be generated.
+                )
+
+nbfit_F
+```
+
+```{r - Train Gradient Boost Machine Classification model}
+gbmfit_F <- train(FLOOR~., #y/target
+                 data = df_train_F, #X/features
+                 metric = 'Kappa', #Metric applied
+                 method = "gbm", #ML algorithm
+                 trControl=gbmfitControl, #Apply CV to the training
+                 tuneLength = 2, # Number of levels for each tuning parameters that should be generated
+                 verbose = FALSE)
+
+gbmfit_F
+```
+
+```{r - Train Random Forest Classification model}
+rffit_RP <- train(FLOOR~., #y/target
+                 data = df_train_F, #X/features
+                 metric = 'Kappa', #Metric applied
+                 method = "rf", #ML algorithm
+                 trControl=rffitControl, #Apply CV to the training
+                 tuneLength = 2, # Number of levels for each tuning parameters that should be generated
+                 verbose = FALSE)
+
+
+
+rffit_F
+```
+
+As asked, in this part we are supposed to train a model using Stochastic Gradient Boosting, GBM, on the training set with 10-fold cross-validation and an Automatic Tuning Grid, which is what is coded above.
+
+Train function chooses the model with the largest performance value (or smallest, for mean squared error in regression models), therefore there is no need to select the best iteration of the models.
+
+```{r -  Ascertain how the model prioritized each feature in each model training}
+varImp(nbfit_F)
+
+varImp(gbmfit_F)
+
+varImp(rffit_F)
+```
 
 
 
 
+As predicted the salary variable is the most relevant in predicting the target variable. Age comes in a close second place. The remaining variables have a really low relative impact when forecasting the target.
+
+```{r - Make predictions based on GBM trained model and calculate basic metrics (with PostResample)}
+pred_GBM <- predict(gbmFit1, newdata = testing)
+
+Prob_pred_GBM <- predict(gbmFit1, newdata = testing, type = "prob")
+
+postResample(pred_GBM, testing$brand)
+```
+
+This model provides an accuracy of ~94% which is pretty high.
+The Kappa or Cohen's Kappa is at ~86% which is quite impressive since this metric is normalized at the baseline of random chance on our dataset.
+This dataset has a slightly unbalanced target, therefore the Kappa value is quite different from the accuracy value.
+It's worth adding that if the model was trained to optimise the accuracy, the metrics accuracy and Kappa obtained would be respectively: 0.932498 0.856289. Therefore optimising this model to the metric "Kappa" is a much better alternative for this dataset as it provided better results in both metrics!
 
 
-
-
-
-
+```{r - Further metrics with confusion matrix}
+confusionMatrix(data = pred_GBM, 
+                reference = testing$brand, 
+                positive = "1")
+```
 
 
 
