@@ -236,7 +236,7 @@ Because this dataset is slightly unbalanced, I will attempt to train according t
 
 Let's train each of the 3 models with the training dataset:
 ## SVM:
-```{r - Train Support Vector Machine Classification model}
+```{r - Train Support Vector Machine Classification model for the BUILDING ID}
 svmfit_BID <- train(BUILDINGID~., #y/target
                  data = df_train_BID, #X/features
                  method = "svmLinear", #ML algorithm
@@ -247,7 +247,7 @@ svmfit_BID <- train(BUILDINGID~., #y/target
 svmfit_BID
 ```
 ## GBM:
-```{r - Train Gradient Boost Machine Classification model}
+```{r - Train Gradient Boost Machine Classification model for the BUILDING ID}
 gbmfit_BID <- train(BUILDINGID~., #y/target
                  data = df_train_BID, #X/features
                  metric = 'Kappa', #Metric applied
@@ -259,7 +259,7 @@ gbmfit_BID <- train(BUILDINGID~., #y/target
 gbmfit_BID
 ```
 ## RF:
-```{r - Train Random Forest Classification model}
+```{r - Train Random Forest Classification model for the BUILDING ID}
 rffit_BID <- train(BUILDINGID~., #y/target
                  data = df_train_BID, #X/features
                  metric = 'Kappa', #Metric applied
@@ -275,7 +275,7 @@ As asked, in this part we are supposed to train 3 models, which is what is coded
 
 Train function automatically picks the iteration with the largest performance value (the one with best Kappa in this case), therefore there is no need to select the best iteration of the models.
 
-```{r -  Ascertain how the model prioritized each feature in each model training}
+```{r -  Ascertain how the model prioritized each feature in each model training for the BUILDING ID}
 varImp(svmfit_BID)
 
 varImp(gbmfit_BID)
@@ -287,7 +287,7 @@ varImp(rffit_BID)
 A few WAPs are recurrent, such as 087 (top 1 for both SVM and GBM and top 8 for RF), 078 (top 3 for SVM, top 7 for GBM and top 1 for RF)...
 This means that we do not need to use all the 500 WAPs, a portion of them will be more than enough. Later I recreate a final model with a smaller amount of features considered.
 
-```{r - Make predictions based on GBM trained model and calculate basic metrics (with PostResample)}
+```{r - Make predictions based on GBM trained model and calculate basic metrics for the BUILDING ID}
 BID_pred_SVM <- predict(svmfit_BID, newdata = df_train)
 confusionMatrix(data = BID_pred_SVM, 
                 reference = factor(df_train$BUILDINGID))
@@ -316,7 +316,7 @@ bwplot(results)
 Even though it is pretty close, it seems that the best model is the Gradient Boosting Machine. Therefore we will use the predicted outcome from this model.
 But first I will recreate the model with less features to make it more robust:
 
-```{r - Recreate the best model with less features:}
+```{r - Recreate the best model with less features for the BUILDING ID:}
 
 col_index <- varImp(gbmfit_BID)$importance %>% 
   mutate(names=row.names(.)) %>%
@@ -360,7 +360,7 @@ Step1_df_validation
 
 **Floor**
 
-First of all let's define the usable features and the target for this model. We now have predicted the Building ID, therefore, this feature is now unlocked and usable:
+First of all let's define the usable features and the target for this model. We now have predicted the Building ID, therefore, this feature is now "unlocked" and is usable to forecast the Floor feature:
 ```{r - Prepare dataset for training this model}
 df_train_F <- df_sample_train %>% select(starts_with("WAP"),"BUILDINGID","FLOOR")
 #Perform factorization on target column:
@@ -375,7 +375,7 @@ Because this dataset is slightly unbalanced, I will attempt to train according t
 
 Let's train each of the 3 models with the training dataset:
 
-```{r - Train Naive Bayes Classification model}
+```{r - Train Support Vector Machine Classification model for Floor:}
 svmfit_F <- train(FLOOR~., #y/target
                  data = df_train_F, #X/features
                  method = "svmLinear", #ML algorithm
@@ -386,7 +386,7 @@ svmfit_F <- train(FLOOR~., #y/target
 svmfit_F
 ```
 
-```{r - Train Gradient Boost Machine Classification model}
+```{r - Train Gradient Boost Machine Classification model for Floor:}
 gbmfit_F <- train(FLOOR~., #y/target
                  data = df_train_F, #X/features
                  metric = 'Kappa', #Metric applied
@@ -398,7 +398,7 @@ gbmfit_F <- train(FLOOR~., #y/target
 gbmfit_F
 ```
 
-```{r - Train Random Forest Classification model}
+```{r - Train Random Forest Classification model for Floor:}
 rffit_F <- train(FLOOR~., #y/target
                  data = df_train_F, #X/features
                  metric = 'Kappa', #Metric applied
@@ -413,7 +413,6 @@ rffit_F
 ```
 
 As asked, in this part we are supposed to train 3 models, which is what is coded above.
-
 Train function automatically picks the iteration with the largest performance value (the one with best Kappa in this case), therefore there is no need to select the best iteration of the models.
 
 ```{r -  Ascertain how the model prioritized each feature in each model training}
@@ -425,10 +424,10 @@ varImp(rffit_F)
 ```
 
 
-A few WAPs are recurrent, such as 087 (top 1 for both SVM and GBM and top 8 for RF), 078 (top 3 for SVM, top 7 for GBM and top 1 for RF)...
-This means that we do not need to use all the 500 WAPs, a portion of them will be more than enough. Later I recreate a final model with a smaller amount of features considered.
+A few WAPs are recurrent, such as 087, 481, 145...
+Once again, this means that we do not need to use all the 500 WAPs, a portion of them will be more than enough. Later I recreate a final model with a smaller amount of features considered.
 
-```{r - Make predictions based on GBM trained model and calculate basic metrics (with PostResample)}
+```{r - Make predictions based on GBM trained model and calculate basic metrics for the Floor variable}
 F_pred_SVM <- predict(svmfit_F, newdata = df_train)
 confusionMatrix(data = F_pred_SVM, 
                 reference = factor(df_train$FLOOR))
@@ -442,6 +441,12 @@ confusionMatrix(data = F_pred_RF,
                 reference = factor(df_train$FLOOR))
 ```
 
+The best model, Random Forest, provides an accuracy of ~95% which is extremely high.
+The Kappa or Cohen's Kappa from this model is is at ~94% which is quite impressive since this metric is normalized at the baseline of random chance on our dataset.
+This dataset has a slightly unbalanced target, therefore the Kappa value is quite different from the accuracy value.
+
+Now let's visualize graphically the accuracy and Kappa from the three models:
+
 ```{r - Compare FLOOR forecasting results in the training dataset:}
 results <- resamples(list(SVM_Model=svmfit_F, GBM_Model=gbmfit_F, RF_Model=rffit_F))
 summary(results)
@@ -452,7 +457,7 @@ bwplot(results)
 Even though it is pretty close, it seems that the best model is the Random Forest Therefore we will use the predicted outcome from this model.
 But first I will recreate the model with less features to make it more robust:
 
-```{r - Recreate the best model with less features:}
+```{r - Recreate the best model (For forecasting Floor) with less features:}
 
 col_index <- varImp(rffit_F)$importance %>% 
   mutate(names=row.names(.)) %>%
@@ -482,6 +487,8 @@ confusionMatrix(data = F_pred_final,
                 reference = factor(df_train$FLOOR))
 ```
 
+We have managed to improve the results of the RF model through reducing the entropy of the model (through reducing quantity of variables)
+
 ```{r - Create prediction for validation dataset with outcome from best model:}
 
 Validation_F_pred <- predict(final_fit_F, newdata = df_validation)
@@ -493,8 +500,6 @@ Validation_F_pred
 Step2_df_validation <- cbind(Step1_df_validation, FLOOR_pred = Validation_F_pred)
 Step2_df_validation
 ```
-
-
 
 **Relative Position**
 
@@ -512,10 +517,9 @@ Because this dataset is slightly unbalanced, I will attempt to train according t
 (Practically, Cohen’s kappa removes the possibility of the classifier and a random guess agreeing and measures the number of predictions it makes that cannot be explained by a random guess. Furthermore, Cohen’s kappa tries to correct the evaluation bias by taking into account the correct classification by a random guess.)
 
 
-
 Let's train each of the 3 models with the training dataset:
 
-```{r - Train Naive Bayes Classification model}
+```{r - Train Support Vector Machine classification model for the RelativePosition feature}
 svmfit_RP <- train(RELATIVEPOSITION~., #y/target
                  data = df_train_RP, #X/features
                  method = "svmLinear", #ML algorithm
@@ -526,7 +530,7 @@ svmfit_RP <- train(RELATIVEPOSITION~., #y/target
 svmfit_RP
 ```
 
-```{r - Train Gradient Boost Machine Classification model}
+```{r - Train Gradient Boost Machine Classification model for the RelativePosition feature}
 gbmfit_RP <- train(RELATIVEPOSITION~., #y/target
                  data = df_train_RP, #X/features
                  metric = 'Kappa', #Metric applied
@@ -538,7 +542,7 @@ gbmfit_RP <- train(RELATIVEPOSITION~., #y/target
 gbmfit_RP
 ```
 
-```{r - Train Random Forest Classification model}
+```{r - Train Random Forest Classification model for the RelativePosition feature}
 rffit_RP <- train(RELATIVEPOSITION~., #y/target
                  data = df_train_RP, #X/features
                  metric = 'Kappa', #Metric applied
@@ -562,7 +566,11 @@ varImp(gbmfit_RP)
 varImp(rffit_RP)
 ```
 
+
+
 In order to predict the Relative Position, the BUILDINGID and FLOOR features are the most relevant. Therefore there is a clear upside to forecasting this feature after the other two.
+Also, a few WAPs are recurrent, such as 338 or 456.
+This means that we do not need to use all the 500 WAPs, a portion of them will be more than enough. Later I recreate a final model with a smaller amount of features considered.
 
 ```{r - Make predictions based on GBM trained model and calculate basic metrics (with PostResample)}
 RP_pred_SVM <- predict(svmfit_RP, newdata = df_train)
@@ -578,6 +586,13 @@ confusionMatrix(data = RP_pred_RF,
                 reference = factor(df_train$RELATIVEPOSITION))
 ```
 
+
+The best model, Random Forest, provides an accuracy of ~90% which is pretty high.
+The Kappa or Cohen's Kappa from this model is is at ~58% which is good since this metric is normalized at the baseline of random chance on our dataset.
+This dataset has a slightly unbalanced target, therefore the Kappa value is quite different from the accuracy value.
+
+Now let's visualize graphically the accuracy and Kappa from the three models:
+
 ```{r - Compare RELATIVEPOSITION forecasting results in the training dataset:}
 results <- resamples(list(SVM_Model=svmfit_RP, GBM_Model=gbmfit_RP, RF_Model=rffit_RP))
 summary(results)
@@ -585,7 +600,7 @@ bwplot(results)
 ```
 
 
-ven though it is pretty close, it seems that, once again, the best model is the Random Forest. Therefore we will use the predicted outcome from this model.
+Even though it is pretty close, it seems that, once again, the best model is the Random Forest. Therefore we will use the predicted outcome from this model.
 But first I will recreate the model with less features to make it more robust:
 
 ```{r - Recreate the best model with less features:}
@@ -594,7 +609,7 @@ col_index <- varImp(rffit_RP)$importance %>%
   mutate(names=row.names(.)) %>%
   arrange(-Overall)
 
-imp_names <- col_index$names[1:250]
+imp_names <- col_index$names[1:300]
 
 df_train_RP_final <- cbind(df_train_RP[,imp_names],
                             RELATIVEPOSITION = df_train_RP$RELATIVEPOSITION)
@@ -632,12 +647,14 @@ Step3_df_validation
 
 
 
-I have now forecasted the categorical/nominal features, now it is time to move on to the numerical ones: Longitude & Latitude.
+
+
+I have now forecasted the categorical/nominal features. Now it is time to move on to the numerical ones: Longitude & Latitude.
 
 **Define Regression Models**
 
 
-I will recreate the strategy emplyed in the classification models, and develop one model for each of the features to be forecasted.
+I will recreate the strategy employed in the classification models, and develop one model for each of the features to be forecasted.
 
 
 **LONGITUDE**
