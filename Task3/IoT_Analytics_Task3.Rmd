@@ -202,15 +202,16 @@ Building_Floor_graph
 Building_InsOut_graph<-ggplot(data=df_train, aes(x=BUILDINGID, fill = factor(RELATIVEPOSITION))) + geom_bar()
 Building_InsOut_graph
 
+Building_InsOut_graph<-ggplot(data=df_train, aes(x=FLOOR, fill = factor(RELATIVEPOSITION))) + geom_bar()
+Building_InsOut_graph
+
 ```
 
 
-**Define Models**
+**Define Classification Models**
 
 I chose the following models because these are the ones I am most familiarized and from what I understood, provide good results right out of the bat:
-Support Vector Machine;
-Gradient Boosting;
-Random Forest;
+Support Vector Machine; Gradient Boosting; Random Forest;
 ```{r - 10 fold cross validation for 3 models to experiment}
 svmfitControl <- trainControl(method = "repeatedcv", 
                               number = 3, # number of folds
@@ -223,10 +224,10 @@ rffitControl <- trainControl(method = "repeatedcv", number = 3, repeats = 1)
 **Building ID**
 
 First of all let's define the usable features and the target for this model:
-```{r}
+```{r - Prepare dataset for training BuildingID}
 df_train_BID <- df_sample_train %>% select(starts_with("WAP"),"BUILDINGID")
 #Perform factorization on target column:
-df_train_BID$BUILDINGID <- as.factor(as.character(df_train_BID$BUILDINGID)) #Reconvert brand into binary column not integer.
+df_train_BID$BUILDINGID <- as.factor(as.character(df_train_BID$BUILDINGID)) #Reconvert feature into binary column not integer.
 ```
 
 Because this dataset is slightly unbalanced, I will attempt to train according to the kappa metric instead of accuracy.
@@ -284,13 +285,10 @@ varImp(rffit_BID)
 
 
 A few WAPs are recurrent, such as 087 (top 1 for both SVM and GBM and top 8 for RF), 078 (top 3 for SVM, top 7 for GBM and top 1 for RF)...
-This means that we do not need to use all the 500 WAPs. A portion of them will be more than enough.
-
-
-As predicted the salary variable is the most relevant in predicting the target variable. Age comes in a close second place. The remaining variables have a really low relative impact when forecasting the target.
+This means that we do not need to use all the 500 WAPs, a portion of them will be more than enough. Later I recreate a final model with a smaller amount of features considered.
 
 ```{r - Make predictions based on GBM trained model and calculate basic metrics (with PostResample)}
-BID_pred_SVM <- predict(svmfit_BID, newdata = d_train)
+BID_pred_SVM <- predict(svmfit_BID, newdata = df_train)
 confusionMatrix(data = BID_pred_SVM, 
                 reference = factor(df_train$BUILDINGID))
 
@@ -304,32 +302,27 @@ confusionMatrix(data = BID_pred_RF,
 ```
 
 
-This model provides an accuracy of ~94% which is pretty high.
-The Kappa or Cohen's Kappa is at ~86% which is quite impressive since this metric is normalized at the baseline of random chance on our dataset.
+These models provide an accuracy of ~99% which is extremely high.
+The Kappa or Cohen's Kappa is at ~99% which is quite impressive since this metric is normalized at the baseline of random chance on our dataset.
 This dataset has a slightly unbalanced target, therefore the Kappa value is quite different from the accuracy value.
-It's worth adding that if the model was trained to optimise the accuracy, the metrics accuracy and Kappa obtained would be respectively: 0.932498 0.856289. Therefore optimising this model to the metric "Kappa" is a much better alternative for this dataset as it provided better results in both metrics!
+Lastly, it worth noting the P-Value is extremely low, clearly under 0.05, as such, the null hypothesis (that the BUILDING ID is randomly created and is in no way forecastable through the other features in the dataset) can be rejected.
 
-
-
-
-Compare the results from the three models:
-
-
-```{r - Compare BUILDINGID results:}
-results <- resamples(list(LB_Model=svmfit_BID, GBM_Model=gbmfit_BID, RF_Model=rffit_BID))
+Now let's compare the accuracy and Kappa from the three models:
+```{r - Compare BUILDINGID forecasting results in the training dataset:}
+results <- resamples(list(SVM_Model=svmfit_BID, GBM_Model=gbmfit_BID, RF_Model=rffit_BID))
 summary(results)
 bwplot(results)
 ```
-Even though it is pretty close, it seems that the best model is the Logistic Boosting. Therefore we will use the predicted outcome from this model.
+Even though it is pretty close, it seems that the best model is the Gradient Boosting Machine. Therefore we will use the predicted outcome from this model.
 But first I will recreate the model with less features to make it more robust:
 
-```{r - Recreate the best model:}
+```{r - Recreate the best model with less features:}
 
 col_index <- varImp(gbmfit_BID)$importance %>% 
   mutate(names=row.names(.)) %>%
   arrange(-Overall)
 
-imp_names <- col_index$names[1:100]
+imp_names <- col_index$names[1:250]
 
 df_train_BID_final <- cbind(df_train_BID[,imp_names],
                             BUILDINGID = df_train_BID$BUILDINGID)
@@ -342,16 +335,19 @@ final_fit_BID <- train(BUILDINGID~., #y/target
                  tuneLength = 2, # Number of levels for each tuning parameters that should be generated
                  verbose = FALSE)
 
-results <- resamples(list(LB_Model=svmfit_BID, GBM_Model=gbmfit_BID, RF_Model=rffit_BID, BestModel = final_fit_BID))
+results <- resamples(list(SVM_Model=svmfit_BID, GBM_Model=gbmfit_BID, RF_Model=rffit_BID, BestModel = final_fit_BID))
 summary(results)
 bwplot(results)
 
+BID_pred_final <- predict(final_fit_BID, newdata = df_train)
+confusionMatrix(data = BID_pred_final, 
+                reference = factor(df_train$BUILDINGID))
 ```
-
+We have managed to improve the results of the GBM model through reducing the entropy of the model (through reducing quantity of variables)
 
 ```{r - Create prediction for validation dataset with outcome from best model:}
 
-Validation_BID_pred <- predict(gbmfit_BID, newdata = df_validation)
+Validation_BID_pred <- predict(final_fit_BID, newdata = df_validation)
 Validation_BID_pred
 
 ```
@@ -362,13 +358,14 @@ Step1_df_validation
 ```
 
 
-**Relative Position**
+**Floor**
 
-First of all let's define the usable features and the target for this model:
-```{r}
-df_train_RP <- df_sample_train %>% select(starts_with("WAP"),"RELATIVEPOSITION")
+First of all let's define the usable features and the target for this model. We now have predicted the Building ID, therefore, this feature is now unlocked and usable:
+```{r - Prepare dataset for training this model}
+df_train_F <- df_sample_train %>% select(starts_with("WAP"),"BUILDINGID","FLOOR")
 #Perform factorization on target column:
-df_train_RP$RELATIVEPOSITION <- as.factor(as.character(df_train_RP$RELATIVEPOSITION)) #Reconvert brand into binary column not integer.
+df_train_F$FLOOR <- as.factor(as.character(df_train_F$FLOOR)) #Reconvert brand feature binary column not integer.
+#df_train_F$BUILDINGID <- as.factor(as.integer(df_train_F$BUILDINGID)) #Reconvert feature into binary column not integer.
 ```
 
 Because this dataset is slightly unbalanced, I will attempt to train according to the kappa metric instead of accuracy.
@@ -379,14 +376,154 @@ Because this dataset is slightly unbalanced, I will attempt to train according t
 Let's train each of the 3 models with the training dataset:
 
 ```{r - Train Naive Bayes Classification model}
-nbfit_RP <- train(RELATIVEPOSITION~., #y/target
-                 data = df_train_RP, #X/features
-                 method = "nb", #ML algorithm
-                 trControl=nbfitControl, #Apply CV to the training
+svmfit_F <- train(FLOOR~., #y/target
+                 data = df_train_F, #X/features
+                 method = "svmLinear", #ML algorithm
+                 trControl=svmfitControl, #Apply CV to the training
                  tuneLength = 2, # Number of levels for each tuning parameters that should be generated.
                 )
 
-nbfit_RP
+svmfit_F
+```
+
+```{r - Train Gradient Boost Machine Classification model}
+gbmfit_F <- train(FLOOR~., #y/target
+                 data = df_train_F, #X/features
+                 metric = 'Kappa', #Metric applied
+                 method = "gbm", #ML algorithm
+                 trControl=gbmfitControl, #Apply CV to the training
+                 tuneLength = 2, # Number of levels for each tuning parameters that should be generated
+                 verbose = FALSE)
+
+gbmfit_F
+```
+
+```{r - Train Random Forest Classification model}
+rffit_F <- train(FLOOR~., #y/target
+                 data = df_train_F, #X/features
+                 metric = 'Kappa', #Metric applied
+                 method = "rf", #ML algorithm
+                 trControl=rffitControl, #Apply CV to the training
+                 tuneLength = 2, # Number of levels for each tuning parameters that should be generated
+                 verbose = FALSE)
+
+
+
+rffit_F
+```
+
+As asked, in this part we are supposed to train 3 models, which is what is coded above.
+
+Train function automatically picks the iteration with the largest performance value (the one with best Kappa in this case), therefore there is no need to select the best iteration of the models.
+
+```{r -  Ascertain how the model prioritized each feature in each model training}
+varImp(svmfit_F)
+
+varImp(gbmfit_F)
+
+varImp(rffit_F)
+```
+
+
+A few WAPs are recurrent, such as 087 (top 1 for both SVM and GBM and top 8 for RF), 078 (top 3 for SVM, top 7 for GBM and top 1 for RF)...
+This means that we do not need to use all the 500 WAPs, a portion of them will be more than enough. Later I recreate a final model with a smaller amount of features considered.
+
+```{r - Make predictions based on GBM trained model and calculate basic metrics (with PostResample)}
+F_pred_SVM <- predict(svmfit_F, newdata = df_train)
+confusionMatrix(data = F_pred_SVM, 
+                reference = factor(df_train$FLOOR))
+
+F_pred_GBM <- predict(gbmfit_F, newdata = df_train)
+confusionMatrix(data = F_pred_GBM, 
+                reference = factor(df_train$FLOOR))
+
+F_pred_RF <- predict(rffit_F, newdata = df_train)
+confusionMatrix(data = F_pred_RF, 
+                reference = factor(df_train$FLOOR))
+```
+
+```{r - Compare FLOOR forecasting results in the training dataset:}
+results <- resamples(list(SVM_Model=svmfit_F, GBM_Model=gbmfit_F, RF_Model=rffit_F))
+summary(results)
+bwplot(results)
+```
+
+
+Even though it is pretty close, it seems that the best model is the Random Forest Therefore we will use the predicted outcome from this model.
+But first I will recreate the model with less features to make it more robust:
+
+```{r - Recreate the best model with less features:}
+
+col_index <- varImp(rffit_F)$importance %>% 
+  mutate(names=row.names(.)) %>%
+  arrange(-Overall)
+
+imp_names <- col_index$names[1:250]
+
+df_train_F_final <- cbind(df_train_F[,imp_names],
+                            FLOOR = df_train_F$FLOOR)
+
+final_fit_F <- train(FLOOR~., #y/target
+                 data = df_train_F_final, #X/features
+                 metric = 'Kappa', #Metric applied
+                 method = "gbm", #ML algorithm
+                 trControl=rffitControl, #Apply CV to the training
+                 tuneLength = 2, # Number of levels for each tuning parameters that should be generated
+                 verbose = FALSE)
+
+results <- resamples(list(SVM_Model=svmfit_F, GBM_Model=gbmfit_F, RF_Model=rffit_F, BestModel = final_fit_BID))
+summary(results)
+bwplot(results)
+
+varImp(final_fit_F)[1:250]
+
+F_pred_final <- predict(final_fit_F, newdata = df_train)
+confusionMatrix(data = F_pred_final, 
+                reference = factor(df_train$FLOOR))
+```
+
+```{r - Create prediction for validation dataset with outcome from best model:}
+
+Validation_F_pred <- predict(final_fit_F, newdata = df_validation)
+Validation_F_pred
+
+```
+
+```{r - Bind WAP + BuildingID values with predicted values to create dataset for next level of cascade}
+Step2_df_validation <- cbind(Step1_df_validation, FLOOR_pred = Validation_F_pred)
+Step2_df_validation
+```
+
+
+
+**Relative Position**
+
+First of all let's define the usable features and the target for this model. We now have predicted the Building ID, therefore, this feature is now unlocked and usable:
+```{r - Prepare dataset for training RelativePosition}
+df_train_RP <- df_sample_train %>% select(starts_with("WAP"),"FLOOR","BUILDINGID","RELATIVEPOSITION")
+
+#df_train_RP$BUILDINGID <- as.factor(as.character(df_train_RP$BUILDINGID)) #Reconvert feature into binary column not integer.
+#df_train_F$FLOOR <- as.factor(as.character(df_train_F$FLOOR)) #Reconvert brand feature binary column not integer.
+#Perform factorization on target column:
+df_train_RP$RELATIVEPOSITION <- as.factor(as.character(df_train_RP$RELATIVEPOSITION)) #Reconvert feature into binary column not integer.
+```
+
+Because this dataset is slightly unbalanced, I will attempt to train according to the kappa metric instead of accuracy.
+(Practically, Cohen’s kappa removes the possibility of the classifier and a random guess agreeing and measures the number of predictions it makes that cannot be explained by a random guess. Furthermore, Cohen’s kappa tries to correct the evaluation bias by taking into account the correct classification by a random guess.)
+
+
+
+Let's train each of the 3 models with the training dataset:
+
+```{r - Train Naive Bayes Classification model}
+svmfit_RP <- train(RELATIVEPOSITION~., #y/target
+                 data = df_train_RP, #X/features
+                 method = "svmLinear", #ML algorithm
+                 trControl=svmfitControl, #Apply CV to the training
+                 tuneLength = 2, # Number of levels for each tuning parameters that should be generated.
+                )
+
+svmfit_RP
 ```
 
 ```{r - Train Gradient Boost Machine Classification model}
@@ -410,161 +547,108 @@ rffit_RP <- train(RELATIVEPOSITION~., #y/target
                  tuneLength = 2, # Number of levels for each tuning parameters that should be generated
                  verbose = FALSE)
 
-
-
 rffit_RP
 ```
 
-As asked, in this part we are supposed to train a model using Stochastic Gradient Boosting, GBM, on the training set with 10-fold cross-validation and an Automatic Tuning Grid, which is what is coded above.
+As asked, in this part we are supposed to train 3 models, which is what is coded above.
 
-Train function chooses the model with the largest performance value (or smallest, for mean squared error in regression models), therefore there is no need to select the best iteration of the models.
+Train function automatically picks the iteration with the largest performance value (the one with best Kappa in this case), therefore there is no need to select the best iteration of the models.
 
 ```{r -  Ascertain how the model prioritized each feature in each model training}
-varImp(nbfit_RP)
+varImp(svmfit_RP)
 
 varImp(gbmfit_RP)
 
 varImp(rffit_RP)
 ```
 
+In order to predict the Relative Position, the BUILDINGID and FLOOR features are the most relevant. Therefore there is a clear upside to forecasting this feature after the other two.
 
-Note, the validation_df has a meaningless value for RELATIVEPOSITON, therefore I will calculate the confusion matrix for the training dataset:
-```{r - Make predictions based on GBM trained model and calculate confusion matrix}
-pred_GBM_RP <- predict(gbmfit_RP, newdata = df_train_RP)
+```{r - Make predictions based on GBM trained model and calculate basic metrics (with PostResample)}
+RP_pred_SVM <- predict(svmfit_RP, newdata = df_train)
+confusionMatrix(data = RP_pred_SVM, 
+                reference = factor(df_train$RELATIVEPOSITION))
 
-confusionMatrix(data = pred_GBM_RP, 
-                reference = df_train_RP$RELATIVEPOSITION, 
-                positive = "1")
+RP_pred_GBM <- predict(gbmfit_RP, newdata = df_train)
+confusionMatrix(data = RP_pred_GBM, 
+                reference = factor(df_train$RELATIVEPOSITION))
+
+RP_pred_RF <- predict(rffit_RP, newdata = df_train)
+confusionMatrix(data = RP_pred_RF, 
+                reference = factor(df_train$RELATIVEPOSITION))
 ```
 
-This model provides an accuracy of ~94% which is pretty high.
-The Kappa or Cohen's Kappa is at ~86% which is quite impressive since this metric is normalized at the baseline of random chance on our dataset.
-This dataset has a slightly unbalanced target, therefore the Kappa value is quite different from the accuracy value.
-It's worth adding that if the model was trained to optimise the accuracy, the metrics accuracy and Kappa obtained would be respectively: 0.932498 0.856289. Therefore optimising this model to the metric "Kappa" is a much better alternative for this dataset as it provided better results in both metrics!
-
-
-```{r - Further metrics with confusion matrix}
-confusionMatrix(data = pred_GBM, 
-                reference = testing$brand, 
-                positive = "1")
-```
-
-
-```{r - Calculate two class summary for binary GBM model}
-temp_pred_GB = factor(ifelse(pred_GBM == 1, "Y", "N"))
-temp_obs_GB = factor(ifelse(testing$brand == 1, "Y", "N"))
-
-twoClassSummary(data = data.frame(obs = temp_obs_GB, pred = temp_pred_GB, Y = Prob_pred_GBM$'1', N = Prob_pred_GBM$'0'), lev = levels(temp_pred_GB))
-#For some reason, this function does not seem to provide ROC results if a binary numerical labeling is used, I had to convert '1' into 'Y' and '0' into 'N' to obtain valid results
-
-mnLogLoss(data = data.frame(obs = temp_obs_GB, pred = temp_pred_GB, Y = Prob_pred_GBM$'1', N = Prob_pred_GBM$'0'), lev = levels(temp_pred_GB))
-```
-
-
-
-*Compare the results from two models:*
-```{r - Compare results}
-results <- resamples(list(GBMAut=gbmFit1, RFMan=rfFit1))
-
+```{r - Compare RELATIVEPOSITION forecasting results in the training dataset:}
+results <- resamples(list(SVM_Model=svmfit_RP, GBM_Model=gbmfit_RP, RF_Model=rffit_RP))
 summary(results)
-
 bwplot(results)
 ```
 
 
+ven though it is pretty close, it seems that, once again, the best model is the Random Forest. Therefore we will use the predicted outcome from this model.
+But first I will recreate the model with less features to make it more robust:
 
+```{r - Recreate the best model with less features:}
 
-**Floor**
+col_index <- varImp(rffit_RP)$importance %>% 
+  mutate(names=row.names(.)) %>%
+  arrange(-Overall)
 
-First of all let's define the usable features and the target for this model:
-```{r}
-df_train_F <- df_sample_train %>% select(starts_with("WAP"),"FLOOR")
-#Perform factorization on target column:
-df_train_F$FLOOR <- as.factor(as.character(df_train_F$FLOOR)) #Reconvert brand into binary column not integer.
-```
+imp_names <- col_index$names[1:250]
 
-Because this dataset is slightly unbalanced, I will attempt to train according to the kappa metric instead of accuracy.
-(Practically, Cohen’s kappa removes the possibility of the classifier and a random guess agreeing and measures the number of predictions it makes that cannot be explained by a random guess. Furthermore, Cohen’s kappa tries to correct the evaluation bias by taking into account the correct classification by a random guess.)
+df_train_RP_final <- cbind(df_train_RP[,imp_names],
+                            RELATIVEPOSITION = df_train_RP$RELATIVEPOSITION)
 
-
-
-Let's train each of the 3 models with the training dataset:
-
-```{r - Train Naive Bayes Classification model}
-nbfit_F <- train(FLOOR~., #y/target
-                 data = df_train_F, #X/features
-                 method = "nb", #ML algorithm
-                 trControl=nbfitControl, #Apply CV to the training
-                 tuneLength = 2, # Number of levels for each tuning parameters that should be generated.
-                )
-
-nbfit_F
-```
-
-```{r - Train Gradient Boost Machine Classification model}
-gbmfit_F <- train(FLOOR~., #y/target
-                 data = df_train_F, #X/features
+final_fit_RP <- train(RELATIVEPOSITION~., #y/target
+                 data = df_train_RP_final, #X/features
                  metric = 'Kappa', #Metric applied
                  method = "gbm", #ML algorithm
-                 trControl=gbmfitControl, #Apply CV to the training
-                 tuneLength = 2, # Number of levels for each tuning parameters that should be generated
-                 verbose = FALSE)
-
-gbmfit_F
-```
-
-```{r - Train Random Forest Classification model}
-rffit_RP <- train(FLOOR~., #y/target
-                 data = df_train_F, #X/features
-                 metric = 'Kappa', #Metric applied
-                 method = "rf", #ML algorithm
                  trControl=rffitControl, #Apply CV to the training
                  tuneLength = 2, # Number of levels for each tuning parameters that should be generated
                  verbose = FALSE)
 
+results <- resamples(list(SVM_Model=svmfit_RP, GBM_Model=gbmfit_RP, RF_Model=rffit_RP, BestModel = final_fit_RP))
+summary(results)
+bwplot(results)
 
+varImp(final_fit_RP)[1:250]
 
-rffit_F
+RP_pred_final <- predict(final_fit_RP, newdata = df_train)
+confusionMatrix(data = RP_pred_final, 
+                reference = factor(df_train$RELATIVEPOSITION))
 ```
 
-As asked, in this part we are supposed to train a model using Stochastic Gradient Boosting, GBM, on the training set with 10-fold cross-validation and an Automatic Tuning Grid, which is what is coded above.
+```{r - Create prediction for validation dataset with outcome from best model:}
 
-Train function chooses the model with the largest performance value (or smallest, for mean squared error in regression models), therefore there is no need to select the best iteration of the models.
+Validation_RP_pred <- predict(final_fit_RP, newdata = df_validation)
+Validation_RP_pred
 
-```{r -  Ascertain how the model prioritized each feature in each model training}
-varImp(nbfit_F)
-
-varImp(gbmfit_F)
-
-varImp(rffit_F)
 ```
 
-
-
-
-As predicted the salary variable is the most relevant in predicting the target variable. Age comes in a close second place. The remaining variables have a really low relative impact when forecasting the target.
-
-```{r - Make predictions based on GBM trained model and calculate basic metrics (with PostResample)}
-pred_GBM <- predict(gbmFit1, newdata = testing)
-
-Prob_pred_GBM <- predict(gbmFit1, newdata = testing, type = "prob")
-
-postResample(pred_GBM, testing$brand)
-```
-
-This model provides an accuracy of ~94% which is pretty high.
-The Kappa or Cohen's Kappa is at ~86% which is quite impressive since this metric is normalized at the baseline of random chance on our dataset.
-This dataset has a slightly unbalanced target, therefore the Kappa value is quite different from the accuracy value.
-It's worth adding that if the model was trained to optimise the accuracy, the metrics accuracy and Kappa obtained would be respectively: 0.932498 0.856289. Therefore optimising this model to the metric "Kappa" is a much better alternative for this dataset as it provided better results in both metrics!
-
-
-```{r - Further metrics with confusion matrix}
-confusionMatrix(data = pred_GBM, 
-                reference = testing$brand, 
-                positive = "1")
+```{r - Bind WAP values + BuildingID + Floor with predicted values to create dataset for next level of cascade}
+Step3_df_validation <- cbind(Step2_df_validation, RELATIVEPOSITION_pred = Validation_RP_pred)
+Step3_df_validation
 ```
 
 
+
+I have now forecasted the categorical/nominal features, now it is time to move on to the numerical ones: Longitude & Latitude.
+
+**Define Regression Models**
+
+
+I will recreate the strategy emplyed in the classification models, and develop one model for each of the features to be forecasted.
+
+
+**LONGITUDE**
+
+
+
+**LATITUDE**
+```{r}
+df_train['LATITUDE']
+df_train['LONGITUDE']
+```
 
 
 
