@@ -633,6 +633,9 @@ confusionMatrix(data = RP_pred_final,
                 reference = factor(df_train$RELATIVEPOSITION))
 ```
 
+We haven't managed to improve the results of the RF model through reducing the entropy of the model (through reducing quantity of variables). However, this models is more robust in the sense that requires less variables and less entropy.
+
+
 ```{r - Create prediction for validation dataset with outcome from best model:}
 
 Validation_RP_pred <- predict(final_fit_RP, newdata = df_validation)
@@ -668,6 +671,13 @@ df_train_LONG <- df_sample_train %>% select(starts_with("WAP"),"FLOOR","BUILDING
 Because this dataset is slightly unbalanced, I will attempt to train according to the kappa metric instead of accuracy.
 (Practically, Cohen’s kappa removes the possibility of the classifier and a random guess agreeing and measures the number of predictions it makes that cannot be explained by a random guess. Furthermore, Cohen’s kappa tries to correct the evaluation bias by taking into account the correct classification by a random guess.)
 
+In order to choose the optimization metric:
+-Both RMSE and R2 quantify how well a regression model fits a dataset.
+-The RMSE tells us how well a regression model can predict the value of the response variable in absolute terms while R2 tells us how well a model can predict the value of the response variable in percentage terms.
+*-R2 does not detect overfitting and is not the best for nonlinear relations*
+
+Therefore, I will use the RMSE metric as the point of this regression is to forecast the absolute Volume as accurately as possible (also the results were better utilizing this metric).
+
 
 Let's train each of the 3 models with the training dataset:
 
@@ -685,7 +695,7 @@ svmfit_LONG
 ```{r - Train Gradient Boost Machine Classification model for the LONGITUDE feature}
 gbmfit_LONG <- train(LONGITUDE~., #y/target
                  data = df_train_LONG, #X/features
-                 metric = 'Kappa', #Metric applied
+                 metric = 'RMSE', #Metric applied
                  method = "gbm", #ML algorithm
                  trControl=gbmfitControl, #Apply CV to the training
                  tuneLength = 2, # Number of levels for each tuning parameters that should be generated
@@ -697,7 +707,7 @@ gbmfit_LONG
 ```{r - Train Random Forest Classification model for the LONGITUDE feature}
 rffit_LONG <- train(LONGITUDE~., #y/target
                  data = df_train_LONG, #X/features
-                 metric = 'Kappa', #Metric applied
+                 metric = 'RMSE', #Metric applied
                  method = "rf", #ML algorithm
                  trControl=rffitControl, #Apply CV to the training
                  tuneLength = 2, # Number of levels for each tuning parameters that should be generated
@@ -802,6 +812,14 @@ df_train['LATITUDE']
 df_train['LONGITUDE']
 ```
 
+After research I found that the coordinates from this dataset are in EPSG:3857, WGS 84 / Pseudo-Mercator format. However, using the following library I can find distances in predictions from two different points.
 
+```{r - Calculate distances from predicted and actual values:}
+library(sf)
+
+line = st_sfc(st_linestring(rbind(c(5,5), c(0,0))), crs = 3857)
+st_length(line)
+
+```
 
 
