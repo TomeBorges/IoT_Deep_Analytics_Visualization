@@ -1004,3 +1004,15 @@ st_length(line)
 After reading about this type of coordinate format (such as: https://gis.stackexchange.com/questions/242545/how-can-epsg3857-be-in-meters) and after running the chunk above and concluding that the euclidian distance between the point (0,0) and (1000,0) in EPSG:3857 coordinates is in fact 1000m, I can conclude that the distance between two points, or that the errors of the longitude and latitude models using this coordinate system can be considered in meters.
 
 As such, this system with cascade models managed to gather a Median average error of 5.8 meters in latitude and 6.7 meters in longitude which results in a vectorial error of under 9 meters which is comparable to the accuracy of the GPS system (sources vary between 4 and 15 meters) in an outside environment. Because the users are inside a building, the GPS accuracy would worsen, therefore this model has the potential of being a better option for locating users.
+
+
+```{r - Print raw predictions of final position features}
+#Step5_df_validation%>% select(ends_with("pred"))
+write.csv(Step5_df_validation%>% select("BUILDINGID_pred",
+                                        "FLOOR_pred",
+                                        "RELATIVEPOSITION_pred",
+                                        "LONGITUDE_pred",
+                                        "LATITUDE_pred")
+          ,"RawPredictions.csv", row.names = TRUE)
+```
+
