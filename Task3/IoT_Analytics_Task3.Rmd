@@ -753,73 +753,254 @@ This dataset has a slightly unbalanced target, therefore the Kappa value is quit
 Now let's visualize graphically the accuracy and Kappa from the three models:
 
 ```{r - Compare RELATIVEPOSITION forecasting results in the training dataset:}
-results <- resamples(list(SVM_Model=svmfit_RP, GBM_Model=gbmfit_RP, RF_Model=rffit_RP))
+results <- resamples(list(SVM_Model=svmfit_LONG, GBM_Model=gbmfit_LONG, RF_Model=rffit_LONG))
 summary(results)
 bwplot(results)
 ```
 
 
-Even though it is pretty close, it seems that, once again, the best model is the Random Forest. Therefore we will use the predicted outcome from this model.
+The model with the smallest error is the Random Forest. Therefore we will use the predicted outcome from this model.
 But first I will recreate the model with less features to make it more robust:
 
-```{r - Recreate the best model with less features:}
+```{r - Recreate the best model with less features to forecast LONGITUDE:}
 
-col_index <- varImp(rffit_RP)$importance %>% 
+col_index <- varImp(rffit_LONG)$importance %>% 
   mutate(names=row.names(.)) %>%
   arrange(-Overall)
+imp_names <- col_index$names[1:250]
 
-imp_names <- col_index$names[1:300]
+df_train_LONG_final <- cbind(df_train_LONG[,imp_names],
+                            LONGITUDE = df_train_LONG$LONGITUDE)
 
-df_train_RP_final <- cbind(df_train_RP[,imp_names],
-                            RELATIVEPOSITION = df_train_RP$RELATIVEPOSITION)
 
-final_fit_RP <- train(RELATIVEPOSITION~., #y/target
-                 data = df_train_RP_final, #X/features
-                 metric = 'Kappa', #Metric applied
-                 method = "gbm", #ML algorithm
+
+final_fit_LONG <- train(LONGITUDE~., #y/target
+                 data = df_train_LONG_final, #X/features
+                 metric = 'RMSE', #Metric applied
+                 method = "rf", #ML algorithm
                  trControl=rffitControl, #Apply CV to the training
                  tuneLength = 2, # Number of levels for each tuning parameters that should be generated
                  verbose = FALSE)
 
-results <- rffit_LONG(list(SVM_Model=svmfit_RP, GBM_Model=gbmfit_RP, RF_Model=rffit_RP, BestModel = final_fit_RP))
+results <- resamples(list(SVM_Model=svmfit_LONG, GBM_Model=gbmfit_LONG, RF_Model=rffit_LONG, BestModel = final_fit_LONG))
 summary(results)
 bwplot(results)
 
-varImp(final_fit_RP)[1:250]
+varImp(final_fit_LONG)[1:250]
 
-RP_pred_final <- predict(final_fit_RP, newdata = df_train)
-confusionMatrix(data = RP_pred_final, 
-                reference = factor(df_train$RELATIVEPOSITION))
+LONG_pred_final <- predict(final_fit_LONG, newdata = df_train)
+postResample(LONG_pred_final, df_train$LONGITUDE)
 ```
+
+
 
 ```{r - Create prediction for validation dataset with outcome from best model:}
 
-Validation_RP_pred <- predict(final_fit_RP, newdata = df_validation)
-Validation_RP_pred
+Validation_LONG_pred <- predict(final_fit_LONG, newdata = df_validation)
+
 
 ```
 
 ```{r - Bind WAP values + BuildingID + Floor with predicted values to create dataset for next level of cascade}
-Step3_df_validation <- cbind(Step2_df_validation, RELATIVEPOSITION_pred = Validation_RP_pred)
-Step3_df_validation
+Step4_df_validation <- cbind(Step3_df_validation, LONGITUDE_pred = Validation_LONG_pred)
+Step4_df_validation
 ```
 
 
 
 **LATITUDE**
-```{r}
-df_train['LATITUDE']
-df_train['LONGITUDE']
+
+First of all let's define the usable features and the target for this model. We now have predicted the Building ID, Floor and RelativePosition, i.e., all categorical features, therefore, these are now "unlocked" and usable:
+
+```{r - Prepare dataset for training LONGITUDE}
+df_train_LAT <- df_sample_train %>% select(starts_with("WAP"),"FLOOR","BUILDINGID","RELATIVEPOSITION","LATITUDE")
 ```
 
-After research I found that the coordinates from this dataset are in EPSG:3857, WGS 84 / Pseudo-Mercator format. However, using the following library I can find distances in predictions from two different points.
+Because this dataset is slightly unbalanced, I will attempt to train according to the kappa metric instead of accuracy.
+(Practically, Cohen’s kappa removes the possibility of the classifier and a random guess agreeing and measures the number of predictions it makes that cannot be explained by a random guess. Furthermore, Cohen’s kappa tries to correct the evaluation bias by taking into account the correct classification by a random guess.)
+
+In order to choose the optimization metric:
+-Both RMSE and R2 quantify how well a regression model fits a dataset.
+-The RMSE tells us how well a regression model can predict the value of the response variable in absolute terms while R2 tells us how well a model can predict the value of the response variable in percentage terms.
+*-R2 does not detect overfitting and is not the best for nonlinear relations*
+
+Therefore, I will use the RMSE metric as the point of this regression is to forecast the absolute Volume as accurately as possible (also the results were better utilizing this metric).
+
+
+Let's train each of the 3 models with the training dataset:
+
+```{r - Train Support Vector Machine classification model for the RelativePosition feature}
+svmfit_LAT <- train(LATITUDE~., #y/target
+                 data = df_train_LAT, #X/features
+                 method = "svmLinear", #ML algorithm
+                 trControl=svmfitControl, #Apply CV to the training
+                 tuneLength = 2, # Number of levels for each tuning parameters that should be generated.
+                )
+
+svmfit_LAT
+```
+
+```{r - Train Gradient Boost Machine Classification model for the LONGITUDE feature}
+gbmfit_LAT <- train(LATITUDE~., #y/target
+                 data = df_train_LAT, #X/features
+                 metric = 'RMSE', #Metric applied
+                 method = "gbm", #ML algorithm
+                 trControl=gbmfitControl, #Apply CV to the training
+                 tuneLength = 2, # Number of levels for each tuning parameters that should be generated
+                 verbose = FALSE)
+
+gbmfit_LAT
+```
+
+```{r - Train Random Forest Classification model for the LONGITUDE feature}
+rffit_LAT <- train(LATITUDE~., #y/target
+                 data = df_train_LAT, #X/features
+                 metric = 'RMSE', #Metric applied
+                 method = "rf", #ML algorithm
+                 trControl=rffitControl, #Apply CV to the training
+                 tuneLength = 2, # Number of levels for each tuning parameters that should be generated
+                 verbose = FALSE)
+
+rffit_LAT
+```
+
+As asked, in this part we are supposed to train 3 models, which is what is coded above.
+
+Train function automatically picks the iteration with the largest performance value (the one with best Kappa in this case), therefore there is no need to select the best iteration of the models.
+
+```{r -  Ascertain how the model prioritized each feature in each model training}
+varImp(svmfit_LAT)
+
+varImp(gbmfit_LAT)
+
+varImp(rffit_LAT)
+```
+
+
+
+In order to predict the LATITUDE, the BUILDINGID and FLOOR features are the most relevant. Therefore there is a clear upside to forecasting this feature after the other two.
+Also, a few WAPs are recurrent, such as 338 or 456.
+This means that we do not need to use all the 500 WAPs, a portion of them will be more than enough. Later I recreate a final model with a smaller amount of features considered.
+
+```{r - Make predictions based on GBM trained model and calculate basic metrics (with PostResample)}
+LAT_pred_SVM <- predict(svmfit_LAT, newdata = df_train)
+postResample(LAT_pred_SVM, df_train$LATITUDE)
+
+LAT_pred_GBM <- predict(gbmfit_LAT, newdata = df_train)
+postResample(LAT_pred_GBM, df_train$LATITUDE)
+
+LAT_pred_RF <- predict(rffit_LAT, newdata = df_train)
+postResample(LAT_pred_RF, df_train$LATITUDE)
+```
+
+
+The best model, Random Forest, provides an accuracy of ~90% which is pretty high.
+The Kappa or Cohen's Kappa from this model is is at ~58% which is good since this metric is normalized at the baseline of random chance on our dataset.
+This dataset has a slightly unbalanced target, therefore the Kappa value is quite different from the accuracy value.
+
+Now let's visualize graphically the accuracy and Kappa from the three models:
+
+```{r - Compare RELATIVEPOSITION forecasting results in the training dataset:}
+results <- resamples(list(SVM_Model=svmfit_LAT, GBM_Model=gbmfit_LAT, RF_Model=rffit_LAT))
+summary(results)
+bwplot(results)
+```
+
+
+The model with the smallest error is the Random Forest. Therefore we will use the predicted outcome from this model.
+But first I will recreate the model with less features to make it more robust:
+
+```{r - Recreate the best model with less features to forecast LONGITUDE:}
+
+col_index <- varImp(rffit_LAT)$importance %>% 
+  mutate(names=row.names(.)) %>%
+  arrange(-Overall)
+imp_names <- col_index$names[1:250]
+
+df_train_LAT_final <- cbind(df_train_LAT[,imp_names],
+                            LATITUDE = df_train_LAT$LATITUDE)
+
+
+
+final_fit_LAT <- train(LATITUDE~., #y/target
+                 data = df_train_LAT_final, #X/features
+                 metric = 'RMSE', #Metric applied
+                 method = "rf", #ML algorithm
+                 trControl=rffitControl, #Apply CV to the training
+                 tuneLength = 2, # Number of levels for each tuning parameters that should be generated
+                 verbose = FALSE)
+
+results <- resamples(list(SVM_Model=svmfit_LAT, GBM_Model=gbmfit_LAT, RF_Model=rffit_LAT, BestModel = final_fit_LAT))
+summary(results)
+bwplot(results)
+
+varImp(final_fit_LAT)[1:250]
+
+LAT_pred_final <- predict(final_fit_LAT, newdata = df_train)
+postResample(LAT_pred_final, df_train$LATITUDE)
+```
+
+
+
+```{r - Create prediction for validation dataset with outcome from best model:}
+
+Validation_LAT_pred <- predict(final_fit_LAT, newdata = df_validation)
+
+
+```
+
+```{r - Bind WAP values + BuildingID + Floor with predicted values to create dataset for next level of cascade}
+Step5_df_validation <- cbind(Step4_df_validation, LATITUDE_pred = Validation_LAT_pred)
+Step5_df_validation
+```
+
+*Interpret results now*
+
+```{r - Longitude and Latitude distributions:}
+hist(df_validation$BUILDINGID,xlab="BuildingID",main="Actual Distribution of BuildingID")
+hist(df_validation$FLOOR,xlab="Floor",main="Actual Distribution of Floor")
+hist(df_validation$RELATIVEPOSITION,xlab="RelativePosition",main="Actual Distribution of RelativePosition")
+
+hist(as.numeric(Step5_df_validation$BUILDINGID_pred),xlab="BuildingID",main="Predicted Distribution of BuildingID")
+hist(as.numeric(Step5_df_validation$FLOOR_pred),xlab="Floor",main="Predicted Distribution of Floor")
+hist(as.numeric(Step5_df_validation$RELATIVEPOSITION_pred),xlab="RelativePosition",main="Predicted Distribution of RelativePosition")
+```
+
+```{r - Longitude and Latitude distributions:}
+hist(df_validation$LONGITUDE,xlab="Longitude",main="Actual Distribution of Longitudes")
+hist(df_validation$LATITUDE,xlab="Latitude",main="Actual Distribution of Latitude")
+
+hist(Step5_df_validation$LONGITUDE_pred,xlab="Longitude",main="Predicted Distribution of Longitudes")
+hist(Step5_df_validation$LATITUDE_pred,xlab="Latitude",main="Predicted Distribution of Latitude")
+```
+
+The distributions are quite similar between the actual values and the forecasted, which is a good sign.
+
+
+```{r}
+results <- resamples(list(BuildingID_Model=final_fit_BID, 
+                          Floor_Model = final_fit_F,
+                          RelativePosition_Model = final_fit_RP))
+summary(results)
+bwplot(results)
+```
+```{r}
+results <- resamples(list(Latitude_Model = final_fit_LAT,
+                          Longitude_Model = final_fit_LONG))
+summary(results)
+bwplot(results)
+```
+
+After research I found that the coordinates from this dataset are in EPSG:3857, WGS 84 / Pseudo-Mercator format. Using the following library I can find distances in predictions from two different points.
 
 ```{r - Calculate distances from predicted and actual values:}
 library(sf)
 
-line = st_sfc(st_linestring(rbind(c(5,5), c(0,0))), crs = 3857)
+line = st_sfc(st_linestring(rbind(c(0,0),
+                                  c(1000,0))), crs = 3857)
 st_length(line)
 
 ```
+After reading about this type of coordinate format (such as: https://gis.stackexchange.com/questions/242545/how-can-epsg3857-be-in-meters) and after running the chunk above and concluding that the euclidian distance between the point (0,0) and (1000,0) in EPSG:3857 coordinates is in fact 1000m, I can conclude that the distance between two points, or that the errors of the longitude and latitude models using this coordinate system can be considered in meters.
 
-
+As such, this system with cascade models managed to gather a Median average error of 5.8 meters in latitude and 6.7 meters in longitude which results in a vectorial error of under 9 meters which is comparable to the accuracy of the GPS system (sources vary between 4 and 15 meters) in an outside environment. Because the users are inside a building, the GPS accuracy would worsen, therefore this model has the potential of being a better option for locating users.
