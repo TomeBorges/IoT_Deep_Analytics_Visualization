@@ -471,12 +471,12 @@ df_train_F_final <- cbind(df_train_F[,imp_names],
 final_fit_F <- train(FLOOR~., #y/target
                  data = df_train_F_final, #X/features
                  metric = 'Kappa', #Metric applied
-                 method = "gbm", #ML algorithm
+                 method = "rf", #ML algorithm
                  trControl=rffitControl, #Apply CV to the training
                  tuneLength = 2, # Number of levels for each tuning parameters that should be generated
                  verbose = FALSE)
 
-results <- resamples(list(SVM_Model=svmfit_F, GBM_Model=gbmfit_F, RF_Model=rffit_F, BestModel = final_fit_BID))
+results <- resamples(list(SVM_Model=svmfit_F, GBM_Model=gbmfit_F, RF_Model=rffit_F, BestModel = final_fit_F))
 summary(results)
 bwplot(results)
 
@@ -617,7 +617,7 @@ df_train_RP_final <- cbind(df_train_RP[,imp_names],
 final_fit_RP <- train(RELATIVEPOSITION~., #y/target
                  data = df_train_RP_final, #X/features
                  metric = 'Kappa', #Metric applied
-                 method = "gbm", #ML algorithm
+                 method = "rf", #ML algorithm
                  trControl=rffitControl, #Apply CV to the training
                  tuneLength = 2, # Number of levels for each tuning parameters that should be generated
                  verbose = FALSE)
